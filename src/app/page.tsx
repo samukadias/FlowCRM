@@ -1,20 +1,22 @@
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { LayoutGrid, List, Plus, Search } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import type { Stage } from "@/generated/prisma/enums";
-import { STAGE_META, STAGE_ORDER, TONE_COLOR } from "@/lib/flow";
+import { STAGE_META, STAGE_ORDER, TRANSITIONS, TONE_COLOR } from "@/lib/flow";
 import { brl, tempoRelativo } from "@/lib/format";
 import { FlowTrack } from "@/components/flow-track";
+import { KanbanBoard, type KanbanCard } from "@/components/kanban-board";
 import { redirect } from "next/navigation";
-import { obterSessao, podeAgir } from "@/lib/auth";
+import { obterSessao, podeAgir, podeAtuar } from "@/lib/auth";
 import { filtroPropostasVisiveis } from "@/lib/visibilidade";
 
 export const dynamic = "force-dynamic";
 
-function urlBusca(q: string | undefined, etapa: string | undefined) {
+function urlBusca(q: string | undefined, etapa: string | undefined, view?: string) {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (etapa) params.set("etapa", etapa);
+  if (view && view !== "lista") params.set("view", view);
   const qs = params.toString();
   return qs ? `/?${qs}` : "/";
 }
@@ -22,15 +24,17 @@ function urlBusca(q: string | undefined, etapa: string | undefined) {
 export default async function BuscaPropostas({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; etapa?: string }>;
+  searchParams: Promise<{ q?: string; etapa?: string; view?: string }>;
 }) {
-  const { q, etapa } = await searchParams;
+  const { q, etapa, view } = await searchParams;
+  const visao = view === "kanban" ? "kanban" : "lista";
   const etapaValida = etapa && etapa in STAGE_META ? (etapa as Stage) : undefined;
   const sessao = await obterSessao();
   if (!sessao) redirect("/login");
   const podeCriar = podeAgir(sessao, "COMERCIAL");
   const visiveis = filtroPropostasVisiveis(sessao);
   const analista = sessao.area !== "ADMIN" && sessao.perfil === "ANALISTA";
+  const etapasNaoTerminais = STAGE_ORDER.filter((s) => !STAGE_META[s].terminal);
 
   const filtroTexto = q?.trim()
     ? {
@@ -45,13 +49,21 @@ export default async function BuscaPropostas({
 
   const termo = q?.trim();
 
+  const filtroEtapa =
+    visao === "kanban"
+      ? { stage: { in: etapasNaoTerminais } } // board só mostra o funil ativo
+      : etapaValida
+        ? { stage: etapaValida }
+        : {};
+
   const [propostas, porEtapa, clientesEncontrados] = await Promise.all([
     prisma.opportunity.findMany({
       where: {
-        AND: [visiveis, filtroTexto, etapaValida ? { stage: etapaValida } : {}],
+        AND: [visiveis, filtroTexto, filtroEtapa],
       },
       include: {
         cliente: { select: { nome: true } },
+        responsavel: { select: { name: true } },
         // Só mudança de etapa conta para "há quantos dias" — uma nota ou
         // e-mail registrado não deve resetar o tempo na etapa atual.
         eventos: {
@@ -90,6 +102,25 @@ export default async function BuscaPropostas({
     0,
   );
 
+  const kanbanColunas = etapasNaoTerminais.map((s) => ({
+    stage: s,
+    label: STAGE_META[s].label,
+    tone: STAGE_META[s].tone,
+  }));
+  const kanbanCards: KanbanCard[] = propostas.map((p) => ({
+    id: p.id,
+    codigo: p.codigo,
+    titulo: p.titulo,
+    clienteNome: p.cliente.nome,
+    valorEstimado: p.valorEstimado != null ? Number(p.valorEstimado) : null,
+    stage: p.stage,
+    desde: p.eventos[0]?.createdAt ?? p.updatedAt,
+    responsavelNome: p.responsavel?.name ?? null,
+    alvosValidos: (TRANSITIONS[p.stage] ?? [])
+      .filter((t) => !STAGE_META[t.para].terminal && podeAtuar(sessao, t.area, p.responsavelId))
+      .map((t) => t.para),
+  }));
+
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -117,6 +148,7 @@ export default async function BuscaPropostas({
           )}
         <form action="/" className="relative order-1 w-full max-w-sm flex-1 sm:order-2">
           {etapaValida && <input type="hidden" name="etapa" value={etapaValida} />}
+          {visao === "kanban" && <input type="hidden" name="view" value="kanban" />}
           <Search
             size={15}
             strokeWidth={1.75}
@@ -132,38 +164,62 @@ export default async function BuscaPropostas({
             className="h-10 w-full rounded-lg border border-line bg-card pr-3 pl-9 text-sm shadow-sm outline-none placeholder:text-faint focus:border-brand focus:ring-2 focus:ring-brand/25"
           />
         </form>
+        <div className="order-3 flex h-10 shrink-0 items-center gap-0.5 rounded-lg border border-line bg-card p-0.5 shadow-sm">
+          <Link
+            href={urlBusca(q, etapaValida, "lista")}
+            aria-label="Ver como lista"
+            title="Lista"
+            className={`flex h-full items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors duration-150 ${
+              visao === "lista" ? "bg-surface-2 text-ink" : "text-faint hover:text-ink"
+            }`}
+          >
+            <List size={14} strokeWidth={1.75} aria-hidden />
+          </Link>
+          <Link
+            href={urlBusca(q, undefined, "kanban")}
+            aria-label="Ver como quadro (kanban)"
+            title="Kanban"
+            className={`flex h-full items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors duration-150 ${
+              visao === "kanban" ? "bg-surface-2 text-ink" : "text-faint hover:text-ink"
+            }`}
+          >
+            <LayoutGrid size={14} strokeWidth={1.75} aria-hidden />
+          </Link>
+        </div>
         </div>
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-1.5">
-        <Link
-          href={urlBusca(q, undefined)}
-          className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 ${
-            !etapaValida
-              ? "border-brand-strong bg-brand-strong text-white shadow-sm"
-              : "border-line bg-card text-muted shadow-sm hover:border-faint hover:text-ink"
-          }`}
-        >
-          Todas
-        </Link>
-        {STAGE_ORDER.filter((s) => (contagem.get(s) ?? 0) > 0).map((s) => (
+      {visao === "lista" && (
+        <div className="mt-6 flex flex-wrap gap-1.5">
           <Link
-            key={s}
-            href={urlBusca(q, s)}
+            href={urlBusca(q, undefined)}
             className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 ${
-              etapaValida === s
+              !etapaValida
                 ? "border-brand-strong bg-brand-strong text-white shadow-sm"
                 : "border-line bg-card text-muted shadow-sm hover:border-faint hover:text-ink"
             }`}
           >
-            {STAGE_META[s].label}
-            <span className={etapaValida === s ? "opacity-70" : "text-faint"}>
-              {" "}
-              {contagem.get(s)}
-            </span>
+            Todas
           </Link>
-        ))}
-      </div>
+          {STAGE_ORDER.filter((s) => (contagem.get(s) ?? 0) > 0).map((s) => (
+            <Link
+              key={s}
+              href={urlBusca(q, s)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 ${
+                etapaValida === s
+                  ? "border-brand-strong bg-brand-strong text-white shadow-sm"
+                  : "border-line bg-card text-muted shadow-sm hover:border-faint hover:text-ink"
+              }`}
+            >
+              {STAGE_META[s].label}
+              <span className={etapaValida === s ? "opacity-70" : "text-faint"}>
+                {" "}
+                {contagem.get(s)}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {clientesEncontrados.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-2">
@@ -195,6 +251,10 @@ export default async function BuscaPropostas({
               ? "Quando o gestor da sua área delegar uma proposta a você (ou você participar de uma movimentação), ela aparece nesta lista."
               : "Busque pelo código (ex.: OPP-2026-0001), pelo nome do cliente ou por uma palavra do título. Você também pode limpar os filtros de etapa."}
           </p>
+        </div>
+      ) : visao === "kanban" ? (
+        <div className="mt-6">
+          <KanbanBoard colunas={kanbanColunas} cards={kanbanCards} />
         </div>
       ) : (
         <div className="card mt-4 overflow-hidden">
