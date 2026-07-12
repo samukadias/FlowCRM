@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
  * de cada teste de integração para isolar um teste do outro. */
 export async function limparBanco() {
   await prisma.notification.deleteMany();
+  await prisma.tarefa.deleteMany();
   await prisma.attestation.deleteMany();
   await prisma.contract.deleteMany();
   await prisma.workflowEvent.deleteMany();

@@ -39,6 +39,9 @@ export default async function RootLayout({
   const naoLidas = sessao
     ? await prisma.notification.count({ where: { userId: sessao.id, lida: false } })
     : 0;
+  const tarefasPendentes = sessao
+    ? await prisma.tarefa.count({ where: { responsavelId: sessao.id, concluida: false } })
+    : 0;
 
   return (
     <html
@@ -68,6 +71,7 @@ export default async function RootLayout({
                     sessao.area === "ADMIN" ||
                     (sessao.area === "PROPOSTAS" && sessao.perfil === "GESTOR")
                   }
+                  tarefasPendentes={tarefasPendentes}
                 />
                 <div className="ml-auto flex items-center gap-2">
                   <Link

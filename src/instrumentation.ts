@@ -7,11 +7,15 @@ export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
   const { verificarEstagnacao } = await import("@/lib/estagnacao");
+  const { verificarTarefasVencidas } = await import("@/lib/tarefas-vencidas");
   const UMA_HORA_MS = 60 * 60 * 1000;
 
   const rodar = () => {
     verificarEstagnacao().catch((erro) => {
       console.error("[estagnacao] falha ao verificar propostas paradas:", erro);
+    });
+    verificarTarefasVencidas().catch((erro) => {
+      console.error("[tarefas-vencidas] falha ao verificar tarefas vencidas:", erro);
     });
   };
 

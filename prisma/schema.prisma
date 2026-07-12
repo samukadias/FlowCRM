@@ -45,6 +45,35 @@ model User {
   propostasAtribuidas  Opportunity[] @relation("ResponsavelProposta")
   contratosAtribuidos  Contract[]    @relation("ResponsavelContrato")
   atestacoesAtribuidas Attestation[] @relation("ResponsavelAtestacao")
+
+  tarefasAtribuidas Tarefa[] @relation("ResponsavelTarefa")
+  tarefasCriadas    Tarefa[] @relation("CriadorTarefa")
+}
+
+// Lembrete/follow-up. Pode estar ligada a uma proposta (mais comum) ou
+// avulsa (ex.: "revisar processo de qualificação").
+model Tarefa {
+  id          String    @id @default(cuid())
+  titulo      String
+  descricao   String?
+  dataLimite  DateTime?
+  concluida   Boolean   @default(false)
+  concluidaEm DateTime?
+  // Trava de notificação de vencida — mesmo padrão do alerta de estagnação
+  alertaVencidaEm DateTime?
+
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id])
+
+  responsavelId String
+  responsavel   User   @relation("ResponsavelTarefa", fields: [responsavelId], references: [id])
+  criadoPorId   String
+  criadoPor     User   @relation("CriadorTarefa", fields: [criadoPorId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([responsavelId, concluida])
 }
 
 // Aviso in-app: criado quando algo entra na fila da área do usuário
@@ -127,6 +156,7 @@ model Opportunity {
 
   eventos  WorkflowEvent[]
   contrato Contract?
+  tarefas  Tarefa[]
 }
 
 enum EventType {

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Building2,
+  CheckSquare,
   FileText,
   ListTodo,
   UsersRound,
@@ -16,6 +17,7 @@ type Item = {
   label: string;
   icone: LucideIcon;
   ativo: (p: string) => boolean;
+  contador?: number;
 };
 
 const itens: Item[] = [
@@ -54,18 +56,28 @@ const usuariosItem: Item = {
   ativo: (p) => p.startsWith("/usuarios"),
 };
 
+const tarefasItem: Item = {
+  href: "/tarefas",
+  label: "Tarefas",
+  icone: CheckSquare,
+  ativo: (p) => p.startsWith("/tarefas"),
+};
+
 export function NavLinks({
   admin = false,
   gestor = false,
   clientes = false,
+  tarefasPendentes = 0,
 }: {
   admin?: boolean;
   gestor?: boolean;
   clientes?: boolean;
+  tarefasPendentes?: number;
 }) {
   const pathname = usePathname();
   const visiveis = [
     ...itens,
+    { ...tarefasItem, contador: tarefasPendentes },
     ...(gestor ? [relatorios] : []),
     ...(clientes ? [clientesItem] : []),
     ...(admin ? [usuariosItem] : []),
@@ -79,7 +91,7 @@ export function NavLinks({
           <Link
             key={item.label}
             href={item.href}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-colors duration-150 ${
+            className={`relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-colors duration-150 ${
               ativo
                 ? "bg-surface-2 font-medium text-ink"
                 : "text-muted hover:bg-surface hover:text-ink"
@@ -92,6 +104,11 @@ export function NavLinks({
               aria-hidden
             />
             <span className="max-sm:sr-only">{item.label}</span>
+            {!!item.contador && (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-strong px-1 text-[10px] font-semibold text-white max-sm:absolute max-sm:top-0.5 max-sm:right-0.5 max-sm:ring-2 max-sm:ring-card">
+                {item.contador > 9 ? "9+" : item.contador}
+              </span>
+            )}
           </Link>
         );
       })}

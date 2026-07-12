@@ -153,3 +153,4 @@ src/test/              → infraestrutura de teste (banco, fixtures, mocks do Ne
 - [x] Alerta de estagnação vira notificação de verdade (não só cor na tela): checagem horária via `instrumentation.ts`, avisa o responsável ou os gestores da fila após 10 dias sem mudança de etapa
 - [x] Busca da tela principal também encontra clientes cadastrados (nome ou sigla), com atalho direto para o cadastro
 - [x] Visão Kanban com arrastar-e-soltar na tela principal (alternável com a Lista via `?view=kanban`), colunas só do funil ativo; drop só é aceito se a transição for permitida para quem está logado
+- [x] Tarefas/lembretes: avulsas ou ligadas a uma proposta, com prazo, responsável e delegação; página "Minhas tarefas", badge de pendências na navegação e checagem horária de tarefas vencidas (`instrumentation.ts`)

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Mail, Paperclip, StickyNote } from "lucide-react";
+import { Check, ListTodo, Mail, Paperclip, StickyNote } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import {
   ATESTACAO_META,
@@ -18,6 +18,7 @@ import {
   registrarEmail,
   registrarNota,
 } from "@/app/propostas/actions";
+import { criarTarefa, concluirTarefa } from "@/app/tarefas/actions";
 import { brl, dataCurta, tempoRelativo } from "@/lib/format";
 import { FlowTrack } from "@/components/flow-track";
 import { StageBadge } from "@/components/stage-badge";
@@ -83,6 +84,19 @@ export default async function DetalheProposta({
       orderBy: { name: "asc" },
     })
     : [];
+
+  const [tarefas, todosUsuarios] = await Promise.all([
+    prisma.tarefa.findMany({
+      where: { opportunityId: id },
+      include: { responsavel: { select: { name: true } } },
+      orderBy: [{ concluida: "asc" }, { dataLimite: "asc" }],
+    }),
+    prisma.user.findMany({
+      where: { ativo: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   const timelineItems: TimelineItem[] = p.eventos.map((e): TimelineItem => {
     if (e.eventType === "EMAIL" || e.eventType === "NOTE") {
@@ -353,7 +367,82 @@ export default async function DetalheProposta({
         </section>
 
         <aside>
-          <h2 className="text-sm font-semibold">Contrato</h2>
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+            <ListTodo size={15} strokeWidth={1.75} aria-hidden />
+            Tarefas
+          </h2>
+          <div className="card mt-4">
+            {tarefas.length > 0 && (
+              <ul className="divide-y divide-line-soft">
+                {tarefas.map((t) => (
+                  <li key={t.id} className="flex items-start gap-2.5 px-4 py-3">
+                    <form action={concluirTarefa} className="mt-0.5">
+                      <input type="hidden" name="id" value={t.id} />
+                      <input type="hidden" name="concluida" value={t.concluida ? "0" : "1"} />
+                      <button
+                        type="submit"
+                        aria-label={t.concluida ? "Reabrir tarefa" : "Concluir tarefa"}
+                        className={`flex size-5 items-center justify-center rounded-md border transition-colors duration-150 ${
+                          t.concluida
+                            ? "border-ok bg-ok-soft text-ok"
+                            : "border-line text-transparent hover:border-brand hover:text-brand"
+                        }`}
+                      >
+                        <Check size={13} strokeWidth={2.5} />
+                      </button>
+                    </form>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm ${t.concluida ? "text-muted line-through" : "text-ink"}`}>
+                        {t.titulo}
+                      </p>
+                      <p className="mt-0.5 text-xs text-faint">
+                        {t.dataLimite && <>{dataCurta.format(t.dataLimite)} · </>}
+                        {t.responsavel.name}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form
+              action={criarTarefa}
+              className={`flex flex-col gap-2 p-4 ${tarefas.length > 0 ? "border-t border-line-soft" : ""}`}
+            >
+              <input type="hidden" name="opportunityId" value={p.id} />
+              <input
+                name="titulo"
+                required
+                placeholder="Nova tarefa…"
+                aria-label="Título da tarefa"
+                className={campoTexto}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="date"
+                  name="dataLimite"
+                  aria-label="Prazo"
+                  className="h-8 rounded-lg border border-line bg-canvas px-2 text-xs outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+                />
+                <select
+                  name="responsavelId"
+                  defaultValue={p.responsavelId ?? sessao.id}
+                  aria-label="Responsável pela tarefa"
+                  className="h-8 rounded-lg border border-line bg-canvas px-2 text-xs outline-none focus:border-brand"
+                >
+                  {todosUsuarios.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.id === sessao.id ? "Eu" : u.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" className={`${btnAdicionar} ml-auto`}>
+                  Adicionar
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <h2 className="mt-8 text-sm font-semibold">Contrato</h2>
           {p.contrato ? (
             <div className="card mt-4 p-5">
               <div className="flex items-center justify-between gap-3">
