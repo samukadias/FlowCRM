@@ -102,12 +102,32 @@ docker compose --profile prod up -d --build
 ```
 Sobe banco + aplicação (build standalone do Next.js) em http://localhost:3000.
 
+## Como testar
+
+```bash
+npm test          # roda a suíte uma vez
+npm run test:watch  # modo watch, durante o desenvolvimento
+```
+
+Testes de integração usam um **banco separado** (`propostaflow_test`, mesmo
+Postgres do Docker) — a suíte cria o banco e aplica as migrações
+automaticamente na primeira vez, e trunca as tabelas antes de cada teste. O
+banco de desenvolvimento nunca é tocado (há uma checagem que recusa rodar se
+`DATABASE_URL` não apontar para um banco `*_test`).
+
+Cobertura atual:
+- `src/lib/auth-core.test.ts` — regras de permissão (`podeAgir`, `ehGestor`, `podeAtuar`)
+- `src/lib/visibilidade.test.ts` — quais propostas cada perfil enxerga na busca
+- `src/lib/flow.test.ts` — integridade da configuração do fluxo (guarda contra typo em `TRANSITIONS`/`QUEUES`/`FILA_DONA`)
+- `src/app/propostas/actions.test.ts` — integração contra o banco real: transições de etapa (incluindo o reset de responsável ao trocar de área e a criação automática do contrato no aceite), delegação e as regras de visibilidade nas ações de nota/e-mail
+
 ## Estrutura
 
 ```
 prisma/schema.prisma   → modelo do banco (oportunidades, contratos, atestações…)
 docs/FLUXO.md          → documentação do workflow e dos estados
 src/app/               → páginas e rotas de API (Next.js App Router)
+src/test/              → infraestrutura de teste (banco, fixtures, mocks do Next.js)
 ```
 
 ## Roadmap inicial
@@ -124,4 +144,5 @@ src/app/               → páginas e rotas de API (Next.js App Router)
 - [x] Notificações in-app: aviso (sino no topo) quando uma proposta entra na fila da sua área ou um contrato é criado
 - [x] Perfis Analista/Gestor por área, com delegação de propostas, contratos e atestações
 - [x] Cadastro de clientes (nome + sigla) gerido por admin/gestor de Propostas; proposta escolhe cliente da lista
-- [ ] Módulo de contratos (saúde) e atestações (faturamento)
+- [x] Nota interna, log de e-mail e anexo na timeline da proposta
+- [x] Suíte de testes (Vitest): permissões, visibilidade, integridade do fluxo e integração das ações críticas contra banco real

@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# .env.test não tem segredo real — só a conexão do banco de teste
+# descartável; versionado para rodar `npm test` sem configuração extra.
+!.env.test
 
 # vercel
 .vercel
