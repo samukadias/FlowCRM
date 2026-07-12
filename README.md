@@ -149,3 +149,6 @@ src/test/              → infraestrutura de teste (banco, fixtures, mocks do Ne
 - [x] Contato principal (nome, e-mail, telefone) no cadastro de cliente
 - [x] Motivo obrigatório ao recusar/cancelar uma proposta (exigido só na página da proposta; fila mantém as ações rápidas sem motivo)
 - [x] Relatório de motivos de perda em /relatorios, respeitando o filtro de período
+- [x] Soma de valor visível em cada seção das Filas (propostas por etapa, contratos, atestações)
+- [x] Alerta de estagnação vira notificação de verdade (não só cor na tela): checagem horária via `instrumentation.ts`, avisa o responsável ou os gestores da fila após 10 dias sem mudança de etapa
+- [x] Busca da tela principal também encontra clientes cadastrados (nome ou sigla), com atalho direto para o cadastro

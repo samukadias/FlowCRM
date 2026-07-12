@@ -66,7 +66,10 @@ export default async function DetalheProposta({
   if (!p) notFound();
 
   const meta = STAGE_META[p.stage];
-  const desde = p.eventos[0]?.createdAt ?? p.updatedAt;
+  // Só mudança de etapa conta para "nesta etapa há X dias" — uma nota ou
+  // e-mail registrado não deve resetar o tempo na etapa atual.
+  const desde =
+    p.eventos.find((e) => e.eventType === "STAGE_CHANGE")?.createdAt ?? p.updatedAt;
   const acoes = (TRANSITIONS[p.stage] ?? []).filter((t) =>
     podeAtuar(sessao, t.area, p.responsavelId),
   );

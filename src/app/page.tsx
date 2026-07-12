@@ -43,14 +43,22 @@ export default async function BuscaPropostas({
       }
     : {};
 
-  const [propostas, porEtapa] = await Promise.all([
+  const termo = q?.trim();
+
+  const [propostas, porEtapa, clientesEncontrados] = await Promise.all([
     prisma.opportunity.findMany({
       where: {
         AND: [visiveis, filtroTexto, etapaValida ? { stage: etapaValida } : {}],
       },
       include: {
         cliente: { select: { nome: true } },
-        eventos: { orderBy: { createdAt: "desc" }, take: 1 },
+        // Só mudança de etapa conta para "há quantos dias" — uma nota ou
+        // e-mail registrado não deve resetar o tempo na etapa atual.
+        eventos: {
+          where: { eventType: "STAGE_CHANGE" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
       },
       orderBy: { updatedAt: "desc" },
     }),
@@ -59,6 +67,19 @@ export default async function BuscaPropostas({
       where: { AND: [visiveis, filtroTexto] },
       _count: true,
     }),
+    termo
+      ? prisma.cliente.findMany({
+          where: {
+            OR: [
+              { nome: { contains: termo, mode: "insensitive" as const } },
+              { sigla: { contains: termo, mode: "insensitive" as const } },
+            ],
+          },
+          select: { id: true, nome: true, sigla: true, _count: { select: { propostas: true } } },
+          orderBy: { nome: "asc" },
+          take: 3,
+        })
+      : Promise.resolve([]),
   ]);
 
   const contagem = new Map(porEtapa.map((g) => [g.stage, g._count]));
@@ -143,6 +164,24 @@ export default async function BuscaPropostas({
           </Link>
         ))}
       </div>
+
+      {clientesEncontrados.length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {clientesEncontrados.map((c) => (
+            <Link
+              key={c.id}
+              href={`/clientes/${c.id}`}
+              className="flex items-center gap-2 rounded-lg border border-line bg-card px-3 py-1.5 text-xs shadow-sm transition-colors duration-150 hover:border-faint"
+            >
+              <span className="font-mono font-medium text-brand">{c.sigla}</span>
+              <span className="text-ink">{c.nome}</span>
+              <span className="text-faint">
+                · {c._count.propostas === 1 ? "1 proposta" : `${c._count.propostas} propostas`}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {propostas.length === 0 ? (
         <div className="mt-16 text-center">

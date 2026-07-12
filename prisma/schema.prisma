@@ -119,6 +119,9 @@ model Opportunity {
   responsavel   User?    @relation("ResponsavelProposta", fields: [responsavelId], references: [id])
   // Só preenchido ao mover para RECUSADA ou CANCELADA
   motivoPerda   MotivoPerda?
+  // Marca quando o alerta de estagnação foi disparado nesta etapa —
+  // evita notificar de novo a cada checagem. Zera a cada mudança de etapa.
+  alertaEstagnacaoEm DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

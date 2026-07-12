@@ -116,6 +116,8 @@ export async function moverProposta(formData: FormData) {
         stage: para,
         ...(mudouDeMaos ? { responsavelId: null } : {}),
         ...(precisaMotivo ? { motivoPerda } : {}),
+        // Toda mudança de etapa reinicia a contagem de estagnação
+        alertaEstagnacaoEm: null,
       },
     });
     await tx.workflowEvent.create({

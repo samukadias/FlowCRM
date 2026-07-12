@@ -52,16 +52,24 @@ function FilaVazia({ mensagem }: { mensagem: string }) {
 function Secao({
   titulo,
   qtd,
+  valor,
   children,
 }: {
   titulo: string;
   qtd: number;
+  /** Soma de valor da seção, já formatada — omitir quando não fizer sentido. */
+  valor?: number;
   children: React.ReactNode;
 }) {
   return (
     <section className="mt-8 first:mt-6">
       <h2 className="text-sm font-semibold">
         {titulo} <span className="ml-1 font-normal text-faint">{qtd}</span>
+        {valor != null && valor > 0 && (
+          <span className="ml-2 font-normal text-muted tabular-nums">
+            · {brl.format(valor)}
+          </span>
+        )}
       </h2>
       {children}
     </section>
@@ -137,7 +145,13 @@ async function FilaPropostas({ area, sessao }: { area: Area; sessao: Sessao | nu
       },
       include: {
         cliente: { select: { nome: true } },
-        eventos: { orderBy: { createdAt: "desc" }, take: 1 },
+        // Só mudança de etapa conta para "há quantos dias" — uma nota ou
+        // e-mail registrado não deve resetar o tempo na etapa atual.
+        eventos: {
+          where: { eventType: "STAGE_CHANGE" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
         responsavel: { select: { name: true } },
       },
       orderBy: { updatedAt: "asc" },
@@ -167,6 +181,7 @@ async function FilaPropostas({ area, sessao }: { area: Area; sessao: Sessao | nu
             key={etapa}
             titulo={FILA_TITULOS[etapa] ?? STAGE_META[etapa].label}
             qtd={daEtapa.length}
+            valor={daEtapa.reduce((s, p) => s + Number(p.valorEstimado ?? 0), 0)}
           >
             <ul className="mt-3 card divide-y divide-line-soft overflow-hidden">
               {daEtapa.map((p) => {
@@ -278,7 +293,11 @@ async function FilaContratos({ sessao }: { sessao: Sessao | null }) {
   }
 
   return (
-    <Secao titulo="Contratos ativos — atualize a saúde de cada um" qtd={contratos.length}>
+    <Secao
+      titulo="Contratos ativos — atualize a saúde de cada um"
+      qtd={contratos.length}
+      valor={contratos.reduce((s, c) => s + Number(c.valor), 0)}
+    >
       <ul className="mt-3 card divide-y divide-line-soft overflow-hidden">
         {contratos.map((c) => {
           const podeMexer = podeAtuar(sessao, "CONTRATOS", c.responsavelId);
@@ -399,7 +418,11 @@ async function FilaFaturamento({ sessao }: { sessao: Sessao | null }) {
       )}
 
       {semCompetencia.length > 0 && (
-        <Secao titulo={`Sem atestação na competência ${competencia}`} qtd={semCompetencia.length}>
+        <Secao
+          titulo={`Sem atestação na competência ${competencia}`}
+          qtd={semCompetencia.length}
+          valor={semCompetencia.reduce((s, c) => s + Number(c.valor) / 12, 0)}
+        >
           <ul className="mt-3 card divide-y divide-line-soft overflow-hidden">
             {semCompetencia.map((c) => (
               <li
@@ -442,7 +465,12 @@ async function FilaFaturamento({ sessao }: { sessao: Sessao | null }) {
         const doGrupo = atestacoes.filter((a) => a.status === status);
         if (doGrupo.length === 0) return null;
         return (
-          <Secao key={status} titulo={titulo} qtd={doGrupo.length}>
+          <Secao
+            key={status}
+            titulo={titulo}
+            qtd={doGrupo.length}
+            valor={doGrupo.reduce((s, a) => s + Number(a.valor), 0)}
+          >
             <ul className="mt-3 card divide-y divide-line-soft overflow-hidden">
               {doGrupo.map((a) => {
                 const podeMexer = podeAtuar(sessao, "FATURAMENTO", a.responsavelId);
