@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+/*
+  PropostaFlow — tokens de design
+  App shell premium: página em neutro frio (slate), superfícies brancas em
+  cards com sombra sutil, cobalto/indigo como acento contido.
+  Cor é informação (estado do fluxo), não decoração.
+*/
+:root {
+  /* Fundo da página (neutro frio, um passo acima do branco) */
+  --canvas: oklch(0.981 0.0035 240);
+  /* Superfícies elevadas: cards, tabelas, header */
+  --card: oklch(1 0 0);
+  --surface: oklch(0.972 0.005 240);
+  --surface-2: oklch(0.952 0.007 240);
+  --ink: oklch(0.21 0.02 240);
+  --muted: oklch(0.45 0.022 240);
+  --faint: oklch(0.60 0.018 240);
+  --line: oklch(0.915 0.008 240);
+  --line-soft: oklch(0.945 0.006 240);
+
+  --brand: oklch(0.49 0.13 238);
+  --brand-strong: oklch(0.40 0.125 240);
+  --brand-soft: oklch(0.945 0.024 238);
+
+  --ok: oklch(0.5 0.105 155);
+  --ok-soft: oklch(0.958 0.03 155);
+  --warn: oklch(0.52 0.115 70);
+  --warn-soft: oklch(0.965 0.038 85);
+  --danger: oklch(0.5 0.15 25);
+  --danger-soft: oklch(0.958 0.024 25);
+
+  --shadow-card:
+    0 1px 2px 0 oklch(0.15 0.02 240 / 0.05),
+    0 1px 3px 0 oklch(0.15 0.02 240 / 0.05);
+  --shadow-pop:
+    0 4px 6px -1px oklch(0.15 0.02 240 / 0.07),
+    0 2px 4px -2px oklch(0.15 0.02 240 / 0.06);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-card: var(--card);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* Card elevado: a superfície padrão de listas, painéis e formulários */
+@utility card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-card);
+}
+
+/* Cabeçalho de coluna estilo tabela: caixa alta sutil */
+@utility th-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Foco visível consistente em toda a aplicação */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none; /* inputs usam ring própria via classes */
+}
+
+/* Pulso do passo atual na régua de fluxo */
+@keyframes flow-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--pulse, var(--brand)), transparent 45%);
+  }
+  70% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.flow-current {
+  animation: flow-pulse 2.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-current {
+    animation: none;
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--pulse, var(--brand)), transparent 78%);
+  }
+}

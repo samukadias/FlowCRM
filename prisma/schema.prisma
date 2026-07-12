@@ -1,0 +1,191 @@
+// PropostaFlow — schema inicial
+// Modela o fluxo: Oportunidade → Tratativa → Verificação → Proposta → Contrato → Atestação/Faturamento
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Pessoas e áreas ────────────────────────────────────────────────
+
+enum Area {
+  COMERCIAL // entrada das oportunidades e entrega da proposta ao cliente
+  PROPOSTAS // tratativa das oportunidades
+  DELIVERY // verificação / validação da tratativa
+  CONTRATOS // controle de saúde do contrato
+  FATURAMENTO // atestação do serviço prestado
+  ADMIN
+}
+
+// Perfil dentro da área: analista trabalha o que lhe foi delegado;
+// gestor delega e enxerga toda a atividade da equipe.
+enum Perfil {
+  ANALISTA
+  GESTOR
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @default("")
+  area         Area
+  perfil       Perfil   @default(ANALISTA)
+  ativo        Boolean  @default(true) // desativado não faz login; histórico é preservado
+  createdAt    DateTime @default(now())
+
+  opportunities Opportunity[]   @relation("CriadoPor")
+  events        WorkflowEvent[]
+  notificacoes  Notification[]
+
+  propostasAtribuidas  Opportunity[] @relation("ResponsavelProposta")
+  contratosAtribuidos  Contract[]    @relation("ResponsavelContrato")
+  atestacoesAtribuidas Attestation[] @relation("ResponsavelAtestacao")
+}
+
+// Aviso in-app: criado quando algo entra na fila da área do usuário
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  titulo    String
+  link      String
+  lida      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, lida])
+}
+
+// Cadastrado pelo administrador ou pelo gestor de Propostas
+model Cliente {
+  id        String   @id @default(cuid())
+  nome      String   @unique
+  sigla     String   @unique // código curto, ex.: TECHNOVA
+  createdAt DateTime @default(now())
+
+  propostas Opportunity[]
+}
+
+// ─── Fluxo da oportunidade até a proposta ───────────────────────────
+
+enum Stage {
+  ENTRADA // registrada pelo Comercial
+  EM_TRATATIVA // com a equipe de Propostas
+  EM_VERIFICACAO // com o Delivery
+  AJUSTES // devolvida pelo Delivery para correção
+  PROPOSTA_PRONTA // validada, disponível para o Comercial
+  ENVIADA_CLIENTE // proposta entregue ao cliente
+  ACEITA // cliente aceitou → gera Contrato
+  RECUSADA
+  CANCELADA
+}
+
+model Opportunity {
+  id            String   @id @default(cuid())
+  codigo        String   @unique // ex: OPP-2026-0001
+  clienteId     String
+  cliente       Cliente  @relation(fields: [clienteId], references: [id])
+  titulo        String
+  descricao     String?
+  valorEstimado Decimal? @db.Decimal(14, 2)
+  stage         Stage    @default(ENTRADA)
+  criadoPorId   String
+  criadoPor     User     @relation("CriadoPor", fields: [criadoPorId], references: [id])
+  // Responsável atual: delegado pelo gestor da área dona da fila.
+  // Zera quando a proposta muda de área.
+  responsavelId String?
+  responsavel   User?    @relation("ResponsavelProposta", fields: [responsavelId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  eventos  WorkflowEvent[]
+  contrato Contract?
+}
+
+enum EventType {
+  STAGE_CHANGE // mudança de etapa (o evento original do fluxo)
+  EMAIL // registro de e-mail trocado com o cliente
+  NOTE // anotação interna
+  ATTACHMENT // anexo
+}
+
+// Trilha de atividade — mudanças de etapa, e-mails, notas e anexos da proposta
+model WorkflowEvent {
+  id            String      @id @default(cuid())
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id])
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+
+  eventType EventType @default(STAGE_CHANGE)
+
+  // Mudança de etapa (apenas para STAGE_CHANGE)
+  deStage    Stage?
+  paraStage  Stage? // opcional: e-mail/nota/anexo não têm etapa de destino
+  observacao String?
+
+  // E-mail / nota
+  subject String?
+  content String?
+
+  // Anexo
+  fileName String?
+  fileSize Int?
+  fileUrl  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([opportunityId, createdAt])
+}
+
+// ─── Pós-aceite: contrato, saúde e atestação ────────────────────────
+
+enum HealthStatus {
+  SAUDAVEL
+  ATENCAO
+  CRITICO
+}
+
+model Contract {
+  id             String       @id @default(cuid())
+  opportunityId  String       @unique
+  opportunity    Opportunity  @relation(fields: [opportunityId], references: [id])
+  numero         String       @unique
+  inicioVigencia DateTime
+  fimVigencia    DateTime?
+  valor          Decimal      @db.Decimal(14, 2)
+  health         HealthStatus @default(SAUDAVEL)
+  responsavelId  String?
+  responsavel    User?        @relation("ResponsavelContrato", fields: [responsavelId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  atestacoes Attestation[]
+}
+
+enum AttestationStatus {
+  PENDENTE // serviço prestado, aguardando confirmação do cliente
+  CONFIRMADA_CLIENTE // cliente confirmou → liberada para atestar
+  ATESTADA // atestação efetuada, pronta para faturamento
+  FATURADA
+  CONTESTADA // cliente não confirmou
+}
+
+model Attestation {
+  id          String            @id @default(cuid())
+  contractId  String
+  contract    Contract          @relation(fields: [contractId], references: [id])
+  competencia   String // ex: "2026-07"
+  valor         Decimal           @db.Decimal(14, 2)
+  status        AttestationStatus @default(PENDENTE)
+  responsavelId String?
+  responsavel   User?             @relation("ResponsavelAtestacao", fields: [responsavelId], references: [id])
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@unique([contractId, competencia])
+}

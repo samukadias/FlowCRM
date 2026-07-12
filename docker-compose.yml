@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: propostaflow-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: propostaflow
+      POSTGRES_PASSWORD: propostaflow
+      POSTGRES_DB: propostaflow
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U propostaflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Aplicação em modo produção (para desenvolvimento use `npm run dev` local)
+  app:
+    build: .
+    container_name: propostaflow-app
+    profiles: ["prod"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://propostaflow:propostaflow@db:5432/propostaflow
+      # Defina um segredo forte em produção: AUTH_SECRET=$(openssl rand -hex 32)
+      AUTH_SECRET: ${AUTH_SECRET:-troque-este-segredo}
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
