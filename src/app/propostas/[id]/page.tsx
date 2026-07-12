@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { Mail, Paperclip, StickyNote } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import {
   ATESTACAO_META,
@@ -9,7 +10,13 @@ import {
   TONE_COLOR,
   TRANSITIONS,
 } from "@/lib/flow";
-import { delegarProposta, moverProposta } from "@/app/propostas/actions";
+import {
+  anexarArquivo,
+  delegarProposta,
+  moverProposta,
+  registrarEmail,
+  registrarNota,
+} from "@/app/propostas/actions";
 import { brl, dataCurta, tempoRelativo } from "@/lib/format";
 import { FlowTrack } from "@/components/flow-track";
 import { StageBadge } from "@/components/stage-badge";
@@ -17,16 +24,29 @@ import { Pill } from "@/components/pill";
 import { ProposalTimeline, type TimelineItem } from "@/components/proposal-timeline";
 import { ehGestor, obterSessao, podeAtuar } from "@/lib/auth";
 import { filtroPropostasVisiveis } from "@/lib/visibilidade";
-import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
+const campoTexto =
+  "w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm outline-none placeholder:text-muted focus:border-brand focus:ring-2 focus:ring-brand/25";
+const btnAdicionar =
+  "h-8 shrink-0 rounded-md border border-line px-3 text-xs font-medium text-muted transition-colors duration-150 hover:text-ink";
+
+const MENSAGENS_ERRO: Record<string, string> = {
+  anexo_invalido:
+    "Não foi possível anexar o arquivo. Confira o formato (PDF, Office, imagem, CSV, TXT ou ZIP) e o tamanho (até 15 MB).",
+  anexo_falhou: "Não foi possível salvar o anexo. Tente novamente.",
+};
+
 export default async function DetalheProposta({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ erro?: string }>;
 }) {
   const { id } = await params;
+  const { erro } = await searchParams;
   const sessao = await obterSessao();
   if (!sessao) redirect("/login");
 
@@ -66,7 +86,7 @@ export default async function DetalheProposta({
         id: e.id,
         type: e.eventType === "EMAIL" ? "email" : "note",
         from: e.user.name,
-        subject: e.subject ?? "(sem assunto)",
+        subject: e.subject ?? (e.eventType === "NOTE" ? "Nota interna" : "(sem assunto)"),
         content: e.content ?? "",
         timestamp: e.createdAt,
       };
@@ -211,7 +231,95 @@ export default async function DetalheProposta({
       <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section>
           <h2 className="text-sm font-semibold">Histórico</h2>
-          <div className="mt-4">
+
+          {erro && MENSAGENS_ERRO[erro] && (
+            <p
+              role="alert"
+              className="mt-4 rounded-lg bg-danger-soft px-3 py-2.5 text-sm font-medium text-danger"
+            >
+              {MENSAGENS_ERRO[erro]}
+            </p>
+          )}
+
+          <div className="card mt-4 divide-y divide-line-soft">
+            <form action={registrarNota} className="flex flex-col gap-2 p-4">
+              <label
+                htmlFor="nota-content"
+                className="flex items-center gap-2 text-xs font-medium text-muted"
+              >
+                <StickyNote size={14} strokeWidth={1.75} aria-hidden />
+                Nota interna
+              </label>
+              <input type="hidden" name="id" value={p.id} />
+              <div className="flex flex-wrap items-end gap-2">
+                <textarea
+                  id="nota-content"
+                  name="content"
+                  rows={2}
+                  required
+                  placeholder="Registrar uma observação para a equipe…"
+                  className={`${campoTexto} flex-1`}
+                />
+                <button type="submit" className={btnAdicionar}>
+                  Adicionar
+                </button>
+              </div>
+            </form>
+
+            <form action={registrarEmail} className="flex flex-col gap-2 p-4">
+              <label
+                htmlFor="email-subject"
+                className="flex items-center gap-2 text-xs font-medium text-muted"
+              >
+                <Mail size={14} strokeWidth={1.75} aria-hidden />
+                Registrar e-mail
+              </label>
+              <input type="hidden" name="id" value={p.id} />
+              <input
+                id="email-subject"
+                name="subject"
+                required
+                placeholder="Assunto"
+                className={campoTexto}
+              />
+              <div className="flex flex-wrap items-end gap-2">
+                <textarea
+                  name="content"
+                  rows={2}
+                  required
+                  placeholder="Conteúdo do e-mail…"
+                  className={`${campoTexto} flex-1`}
+                />
+                <button type="submit" className={btnAdicionar}>
+                  Registrar
+                </button>
+              </div>
+            </form>
+
+            <form action={anexarArquivo} className="flex flex-wrap items-center gap-3 p-4">
+              <label
+                htmlFor="anexo-file"
+                className="flex shrink-0 items-center gap-2 text-xs font-medium text-muted"
+              >
+                <Paperclip size={14} strokeWidth={1.75} aria-hidden />
+                Anexar arquivo
+              </label>
+              <input type="hidden" name="id" value={p.id} />
+              <input
+                id="anexo-file"
+                type="file"
+                name="file"
+                required
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.png,.jpg,.jpeg,.gif,.webp,.zip"
+                className="min-w-0 flex-1 text-xs text-muted file:mr-3 file:rounded-md file:border-0 file:bg-surface file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-ink file:transition-colors file:duration-150 hover:file:bg-surface-2"
+              />
+              <button type="submit" className={btnAdicionar}>
+                Anexar
+              </button>
+            </form>
+          </div>
+
+          <div className="mt-6">
             <ProposalTimeline items={timelineItems} />
           </div>
         </section>

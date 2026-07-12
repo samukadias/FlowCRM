@@ -41,3 +41,6 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# anexos enviados pelos usuários (persistidos em volume no Docker)
+/uploads

@@ -7,6 +7,8 @@ import type { Stage } from "@/generated/prisma/enums";
 import { FILA_DONA, FILA_TITULOS, TRANSITIONS } from "@/lib/flow";
 import { ehGestor, obterSessao, podeAgir, podeAtuar } from "@/lib/auth";
 import { notificarArea, notificarUsuario } from "@/lib/notificar";
+import { filtroPropostasVisiveis } from "@/lib/visibilidade";
+import { AnexoInvalido, salvarAnexo } from "@/lib/uploads";
 
 /** Gera o próximo código sequencial do ano, ex.: OPP-2026-0009. */
 async function proximoCodigo(prefixo: "OPP" | "CTR"): Promise<string> {
@@ -197,4 +199,75 @@ export async function delegarProposta(formData: FormData) {
 
   revalidatePath(`/propostas/${id}`);
   revalidatePath("/filas", "layout");
+}
+
+/** Confere sessão + visibilidade da proposta; devolve a sessão ou redireciona. */
+async function exigirVisibilidade(id: string) {
+  const sessao = await obterSessao();
+  if (!sessao) redirect("/login");
+  const visivel = await prisma.opportunity.findFirst({
+    where: { AND: [{ id }, filtroPropostasVisiveis(sessao)] },
+    select: { id: true },
+  });
+  if (!visivel) redirect("/");
+  return sessao;
+}
+
+/** Registra uma anotação interna na timeline da proposta. */
+export async function registrarNota(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const content = String(formData.get("content") ?? "").trim();
+  if (!id || !content) return;
+
+  const sessao = await exigirVisibilidade(id);
+  await prisma.workflowEvent.create({
+    data: { opportunityId: id, userId: sessao.id, eventType: "NOTE", content },
+  });
+
+  revalidatePath(`/propostas/${id}`);
+}
+
+/** Registra a troca de um e-mail com o cliente na timeline da proposta. */
+export async function registrarEmail(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const subject = String(formData.get("subject") ?? "").trim();
+  const content = String(formData.get("content") ?? "").trim();
+  if (!id || !subject || !content) return;
+
+  const sessao = await exigirVisibilidade(id);
+  await prisma.workflowEvent.create({
+    data: { opportunityId: id, userId: sessao.id, eventType: "EMAIL", subject, content },
+  });
+
+  revalidatePath(`/propostas/${id}`);
+}
+
+/** Anexa um arquivo à proposta (PDF, Office, imagem, CSV, TXT ou ZIP; até 15 MB). */
+export async function anexarArquivo(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const file = formData.get("file");
+  if (!id || !(file instanceof File) || file.size === 0) return;
+
+  const sessao = await exigirVisibilidade(id);
+
+  let anexo;
+  try {
+    anexo = await salvarAnexo(file);
+  } catch (e) {
+    const codigo = e instanceof AnexoInvalido ? "anexo_invalido" : "anexo_falhou";
+    redirect(`/propostas/${id}?erro=${codigo}`);
+  }
+
+  await prisma.workflowEvent.create({
+    data: {
+      opportunityId: id,
+      userId: sessao.id,
+      eventType: "ATTACHMENT",
+      fileName: anexo.fileName,
+      fileSize: anexo.fileSize,
+      fileUrl: anexo.fileUrl,
+    },
+  });
+
+  revalidatePath(`/propostas/${id}`);
 }
