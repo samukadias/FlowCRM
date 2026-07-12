@@ -96,12 +96,24 @@ model Cliente {
   sigla     String   @unique // código curto, ex.: TECHNOVA
   createdAt DateTime @default(now())
 
-  // Contato principal — opcional, nem todo cliente é cadastrado já com um
-  contatoNome     String?
-  contatoEmail    String?
-  contatoTelefone String?
-
   propostas Opportunity[]
+  contatos  Contact[]
+}
+
+// Interlocutor do cliente — um cliente pode ter vários (financeiro, técnico,
+// decisor…); no máximo um é o principal por vez.
+model Contact {
+  id        String   @id @default(cuid())
+  clienteId String
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  nome      String
+  cargo     String?
+  email     String?
+  telefone  String?
+  principal Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([clienteId])
 }
 
 // ─── Fluxo da oportunidade até a proposta ───────────────────────────
@@ -157,6 +169,20 @@ model Opportunity {
   eventos  WorkflowEvent[]
   contrato Contract?
   tarefas  Tarefa[]
+}
+
+// Regra configurável do alerta de estagnação (checagem horária em
+// instrumentation.ts): substitui o antigo limiar único fixo por regras que o
+// ADMIN cria/edita em /automacoes. `stage: null` funciona como coringa —
+// vale para qualquer etapa não terminal sem regra própria.
+model AutomationRule {
+  id         String   @id @default(cuid())
+  nome       String
+  stage      Stage?
+  diasLimite Int
+  ativo      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 enum EventType {

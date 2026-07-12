@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 export async function limparBanco() {
   await prisma.notification.deleteMany();
   await prisma.tarefa.deleteMany();
+  await prisma.automationRule.deleteMany();
   await prisma.attestation.deleteMany();
   await prisma.contract.deleteMany();
   await prisma.workflowEvent.deleteMany();

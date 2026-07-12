@@ -11,10 +11,15 @@ import {
   HEALTH_META,
   QUEUES,
   STAGE_META,
-  TRANSITIONS,
 } from "@/lib/flow";
-import { brl, dataCurta, tempoRelativo } from "@/lib/format";
-import { delegarProposta, moverProposta } from "@/app/propostas/actions";
+import { brl, dataCurta } from "@/lib/format";
+import {
+  delegarProposta,
+  delegarPropostasEmMassa,
+  moverProposta,
+  moverPropostasEmMassa,
+} from "@/app/propostas/actions";
+import { FilaSelecao, type ItemFila } from "@/components/fila-selecao";
 import {
   atualizarSaude,
   delegarAtestacao,
@@ -22,7 +27,6 @@ import {
   gerarAtestacao,
   moverAtestacao,
 } from "@/app/filas/actions";
-import { FlowTrack } from "@/components/flow-track";
 import { Pill } from "@/components/pill";
 import { ehGestor, obterSessao, podeAtuar, type Sessao } from "@/lib/auth";
 
@@ -183,78 +187,30 @@ async function FilaPropostas({ area, sessao }: { area: Area; sessao: Sessao | nu
             qtd={daEtapa.length}
             valor={daEtapa.reduce((s, p) => s + Number(p.valorEstimado ?? 0), 0)}
           >
-            <ul className="mt-3 card divide-y divide-line-soft overflow-hidden">
-              {daEtapa.map((p) => {
+            <FilaSelecao
+              area={area}
+              gestor={gestor}
+              equipe={equipe}
+              mover={moverProposta}
+              delegar={delegarProposta}
+              moverEmMassa={moverPropostasEmMassa}
+              delegarEmMassa={delegarPropostasEmMassa}
+              itens={daEtapa.map((p): ItemFila => {
                 const desde = p.eventos[0]?.createdAt ?? p.updatedAt;
-                const dias = Math.floor((Date.now() - desde.getTime()) / 86_400_000);
-                const podeMover = podeAtuar(sessao, area, p.responsavelId);
-                return (
-                  <li
-                    key={p.id}
-                    className="grid grid-cols-1 items-center gap-x-6 gap-y-3 px-5 py-3.5 md:grid-cols-[minmax(0,1fr)_170px_85px_auto]"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-baseline gap-2.5">
-                        <Link
-                          href={`/propostas/${p.id}`}
-                          className="font-mono text-xs text-brand hover:underline"
-                        >
-                          {p.codigo}
-                        </Link>
-                        <span className="truncate text-xs text-muted">{p.cliente.nome}</span>
-                      </div>
-                      <p className="mt-0.5 truncate text-sm font-medium">{p.titulo}</p>
-                      <Responsavel nome={p.responsavel?.name ?? null} />
-                    </div>
-                    <div className="max-md:hidden">
-                      <FlowTrack stage={p.stage} />
-                    </div>
-                    <p
-                      className={`text-xs tabular-nums ${dias > 10 ? "font-medium text-warn" : "text-muted"}`}
-                    >
-                      {tempoRelativo(desde)}
-                    </p>
-                    <div className="flex flex-col items-start gap-2">
-                      {podeMover ? (
-                        <form action={moverProposta} className="flex flex-wrap gap-2">
-                          <input type="hidden" name="id" value={p.id} />
-                          {(TRANSITIONS[p.stage] ?? [])
-                            // Recusa/cancelamento exigem motivo — só na página da proposta,
-                            // onde há espaço para o seletor (não neste botão rápido da fila).
-                            .filter((t) => t.area === area && t.para !== "RECUSADA" && t.para !== "CANCELADA")
-                            .map((t) => (
-                              <button
-                                key={t.para}
-                                type="submit"
-                                name="para"
-                                value={t.para}
-                                className={t.destrutiva ? btnDestrutivo : btnPrimario}
-                              >
-                                {t.rotulo}
-                              </button>
-                            ))}
-                          {(TRANSITIONS[p.stage] ?? []).some(
-                            (t) => t.area === area && (t.para === "RECUSADA" || t.para === "CANCELADA"),
-                          ) && (
-                            <a href={`/propostas/${p.id}`} className={`${btnNeutro} leading-8`}>
-                              Recusar/cancelar…
-                            </a>
-                          )}
-                        </form>
-                      ) : null}
-                      {gestor && (
-                        <Delegar
-                          action={delegarProposta}
-                          itemId={p.id}
-                          equipe={equipe}
-                          atualId={p.responsavelId}
-                        />
-                      )}
-                    </div>
-                  </li>
-                );
+                return {
+                  id: p.id,
+                  codigo: p.codigo,
+                  titulo: p.titulo,
+                  clienteNome: p.cliente.nome,
+                  stage: p.stage,
+                  responsavelId: p.responsavelId,
+                  responsavelNome: p.responsavel?.name ?? null,
+                  desde: desde.toISOString(),
+                  dias: Math.floor((Date.now() - desde.getTime()) / 86_400_000),
+                  podeMover: podeAtuar(sessao, area, p.responsavelId),
+                };
               })}
-            </ul>
+            />
           </Secao>
         );
       })}

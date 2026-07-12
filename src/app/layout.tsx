@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { Bell, LogOut } from "lucide-react";
 import { NavLinks } from "@/components/nav-links";
+import { CommandPalette } from "@/components/command-palette";
 import { obterSessao } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AREA_LABELS } from "@/lib/flow";
@@ -74,6 +75,7 @@ export default async function RootLayout({
                   tarefasPendentes={tarefasPendentes}
                 />
                 <div className="ml-auto flex items-center gap-2">
+                  <CommandPalette />
                   <Link
                     href="/notificacoes"
                     aria-label={`Notificações${naoLidas > 0 ? ` (${naoLidas} não lidas)` : ""}`}

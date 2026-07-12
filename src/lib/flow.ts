@@ -102,6 +102,9 @@ export const STAGE_ORDER: Stage[] = [
   "CANCELADA",
 ];
 
+/** Etapas ainda em curso — fora do caminho encerrado (aceita/recusada/cancelada). */
+export const ETAPAS_NAO_TERMINAIS: Stage[] = STAGE_ORDER.filter((s) => !STAGE_META[s].terminal);
+
 export const AREA_LABELS: Record<Area, string> = {
   COMERCIAL: "Comercial",
   PROPOSTAS: "Propostas",

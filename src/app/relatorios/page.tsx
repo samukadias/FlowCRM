@@ -121,7 +121,14 @@ export default async function Relatorios({
   const [opps, eventos, contratos, atestacoes] = await Promise.all([
     prisma.opportunity.findMany({
       where: filtroProposta,
-      select: { id: true, stage: true, valorEstimado: true, motivoPerda: true },
+      select: {
+        id: true,
+        stage: true,
+        valorEstimado: true,
+        motivoPerda: true,
+        criadoPorId: true,
+        criadoPor: { select: { name: true } },
+      },
     }),
     prisma.workflowEvent.findMany({
       where: inicio ? { opportunity: filtroProposta } : {},
@@ -167,6 +174,42 @@ export default async function Relatorios({
       .filter((o) => o.stage === etapa)
       .reduce((s, o) => s + (Number(o.valorEstimado ?? 0) * STAGE_META[etapa].probabilidade) / 100, 0),
   }));
+
+  // Desempenho por quem registrou a proposta — o "vendedor" de origem do negócio
+  const porVendedor = new Map<
+    string,
+    {
+      id: string;
+      nome: string;
+      qtd: number;
+      valor: number;
+      aceitas: number;
+      decididas: number;
+      ponderado: number;
+    }
+  >();
+  for (const o of opps) {
+    const atual = porVendedor.get(o.criadoPorId) ?? {
+      id: o.criadoPorId,
+      nome: o.criadoPor.name,
+      qtd: 0,
+      valor: 0,
+      aceitas: 0,
+      decididas: 0,
+      ponderado: 0,
+    };
+    atual.qtd += 1;
+    atual.valor += Number(o.valorEstimado ?? 0);
+    if (o.stage === "ACEITA") atual.aceitas += 1;
+    if (o.stage === "ACEITA" || o.stage === "RECUSADA" || o.stage === "CANCELADA") {
+      atual.decididas += 1;
+    }
+    if (!STAGE_META[o.stage].terminal) {
+      atual.ponderado += (Number(o.valorEstimado ?? 0) * STAGE_META[o.stage].probabilidade) / 100;
+    }
+    porVendedor.set(o.criadoPorId, atual);
+  }
+  const rankingVendedores = [...porVendedor.values()].sort((a, b) => b.valor - a.valor);
   const valorContratado = contratos.reduce((s, c) => s + Number(c.valor), 0);
   const faturado = atestacoes
     .filter((a) => a.status === "FATURADA")
@@ -329,6 +372,48 @@ export default async function Relatorios({
           />
         ) : (
           <p className="mt-4 text-sm text-muted">Nenhuma proposta em andamento no período.</p>
+        )}
+      </section>
+
+      <section className="card mt-10 p-6">
+        <h2 className="text-sm font-semibold">Desempenho por responsável</h2>
+        <p className="mt-0.5 text-xs text-muted">
+          Propostas registradas por quem trouxe o negócio, no período selecionado
+        </p>
+        {rankingVendedores.length > 0 ? (
+          <div className="mt-4 overflow-x-auto">
+            <div className="min-w-[560px]">
+              <div className="grid grid-cols-[1fr_90px_120px_110px_130px] gap-3 px-2 pb-2">
+                <span className="th-label">Responsável</span>
+                <span className="th-label text-right">Propostas</span>
+                <span className="th-label text-right">Valor total</span>
+                <span className="th-label text-right">Taxa de aceite</span>
+                <span className="th-label text-right">Pipeline ponderado</span>
+              </div>
+              <ul className="divide-y divide-line-soft rounded-lg border border-line">
+                {rankingVendedores.map((v) => (
+                  <li
+                    key={v.id}
+                    className="grid grid-cols-[1fr_90px_120px_110px_130px] items-center gap-3 px-2 py-2.5 text-sm"
+                  >
+                    <span className="truncate font-medium">{v.nome}</span>
+                    <span className="text-right tabular-nums text-muted">{v.qtd}</span>
+                    <span className="text-right tabular-nums">{brlCompacto.format(v.valor)}</span>
+                    <span className="text-right tabular-nums text-muted">
+                      {v.decididas > 0
+                        ? `${Math.round((v.aceitas / v.decididas) * 100)}%`
+                        : "—"}
+                    </span>
+                    <span className="text-right tabular-nums">
+                      {brlCompacto.format(v.ponderado)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-muted">Nenhuma proposta registrada no período.</p>
         )}
       </section>
 

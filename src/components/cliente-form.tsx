@@ -18,9 +18,6 @@ export function ClienteForm({
     id: string;
     nome: string;
     sigla: string;
-    contatoNome?: string | null;
-    contatoEmail?: string | null;
-    contatoTelefone?: string | null;
   };
   erro?: string;
 }) {
@@ -60,45 +57,6 @@ export function ClienteForm({
             Código curto e único, só letras e números (salvo em maiúsculas).
           </span>
         </label>
-
-        <div className="border-t border-line pt-5">
-          <p className="text-sm font-medium">Contato principal</p>
-          <p className="mt-0.5 text-xs text-muted">
-            Opcional — quem falar por este cliente no dia a dia da proposta.
-          </p>
-          <div className="mt-3 space-y-4">
-            <label className="block text-sm font-medium">
-              Nome do interlocutor
-              <input
-                name="contatoNome"
-                defaultValue={cliente?.contatoNome ?? ""}
-                placeholder="Ex.: Marina Alves"
-                className={campo}
-              />
-            </label>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <label className="block text-sm font-medium">
-                E-mail
-                <input
-                  type="email"
-                  name="contatoEmail"
-                  defaultValue={cliente?.contatoEmail ?? ""}
-                  placeholder="marina@cliente.com"
-                  className={campo}
-                />
-              </label>
-              <label className="block text-sm font-medium">
-                Telefone
-                <input
-                  name="contatoTelefone"
-                  defaultValue={cliente?.contatoTelefone ?? ""}
-                  placeholder="(11) 99999-0000"
-                  className={campo}
-                />
-              </label>
-            </div>
-          </div>
-        </div>
 
         <div className="flex items-center gap-3 pt-2">
           <button

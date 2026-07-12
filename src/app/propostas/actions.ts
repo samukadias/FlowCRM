@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import type { MotivoPerda, Stage } from "@/generated/prisma/enums";
 import { FILA_DONA, FILA_TITULOS, MOTIVO_PERDA_LABELS, TRANSITIONS } from "@/lib/flow";
 import { ehGestor, obterSessao, podeAgir, podeAtuar } from "@/lib/auth";
@@ -82,6 +83,89 @@ export async function criarProposta(formData: FormData) {
   redirect(`/propostas/${proposta.id}`);
 }
 
+type PropostaComCliente = Prisma.OpportunityGetPayload<{
+  include: { cliente: { select: { nome: true } } };
+}>;
+
+/** Núcleo de uma mudança de etapa: grava o evento, zera o responsável quando
+ * troca de área dona da fila, avisa quem precisa ser avisado e — no aceite —
+ * gera o contrato. Compartilhado entre a movimentação individual e em massa;
+ * a exigência de motivo (recusa/cancelamento) é responsabilidade do chamador. */
+async function executarMovimentacao(
+  proposta: PropostaComCliente,
+  para: Stage,
+  atorId: string,
+  opcoes: { observacao?: string | null; motivoPerda?: MotivoPerda | null } = {},
+) {
+  const donoNovo = FILA_DONA[para];
+  const mudouDeMaos = donoNovo !== FILA_DONA[proposta.stage];
+
+  await prisma.$transaction(async (tx) => {
+    await tx.opportunity.update({
+      where: { id: proposta.id },
+      data: {
+        stage: para,
+        ...(mudouDeMaos ? { responsavelId: null } : {}),
+        ...(opcoes.motivoPerda ? { motivoPerda: opcoes.motivoPerda } : {}),
+        // Toda mudança de etapa reinicia a contagem de estagnação
+        alertaEstagnacaoEm: null,
+      },
+    });
+    await tx.workflowEvent.create({
+      data: {
+        opportunityId: proposta.id,
+        deStage: proposta.stage,
+        paraStage: para,
+        userId: atorId,
+        observacao: opcoes.observacao || null,
+      },
+    });
+  });
+
+  // Avisa os gestores da área que passa a ser dona da fila (para delegarem)
+  if (donoNovo && mudouDeMaos) {
+    await notificarArea(
+      donoNovo,
+      `${proposta.codigo} · ${proposta.cliente.nome} — ${FILA_TITULOS[para]?.toLowerCase()}`,
+      `/propostas/${proposta.id}`,
+      { excetoUserId: atorId, apenasGestores: true },
+    );
+  }
+
+  // Aceite gera o contrato automaticamente (vigência inicial de 12 meses).
+  if (para === "ACEITA") {
+    const existente = await prisma.contract.findUnique({ where: { opportunityId: proposta.id } });
+    if (!existente) {
+      const inicio = new Date();
+      const fim = new Date(inicio);
+      fim.setFullYear(fim.getFullYear() + 1);
+      const contrato = await prisma.contract.create({
+        data: {
+          opportunityId: proposta.id,
+          numero: await proximoCodigo("CTR"),
+          inicioVigencia: inicio,
+          fimVigencia: fim,
+          valor: proposta.valorEstimado ?? 0,
+        },
+      });
+      await Promise.all([
+        notificarArea(
+          "CONTRATOS",
+          `Contrato ${contrato.numero} criado — ${proposta.cliente.nome} (${proposta.codigo})`,
+          `/propostas/${proposta.id}`,
+          { excetoUserId: atorId, apenasGestores: true },
+        ),
+        notificarArea(
+          "FATURAMENTO",
+          `Contrato ${contrato.numero} ativo — gerar atestações de ${proposta.cliente.nome}`,
+          `/filas/faturamento`,
+          { excetoUserId: atorId, apenasGestores: true },
+        ),
+      ]);
+    }
+  }
+}
+
 export async function moverProposta(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const para = String(formData.get("para") ?? "") as Stage;
@@ -105,74 +189,10 @@ export async function moverProposta(formData: FormData) {
     redirect(`/propostas/${id}?erro=motivo_obrigatorio`);
   }
 
-  // Ao mudar de área, o responsável zera até o gestor da nova fila delegar
-  const donoNovo = FILA_DONA[para];
-  const mudouDeMaos = donoNovo !== FILA_DONA[proposta.stage];
-
-  await prisma.$transaction(async (tx) => {
-    await tx.opportunity.update({
-      where: { id },
-      data: {
-        stage: para,
-        ...(mudouDeMaos ? { responsavelId: null } : {}),
-        ...(precisaMotivo ? { motivoPerda } : {}),
-        // Toda mudança de etapa reinicia a contagem de estagnação
-        alertaEstagnacaoEm: null,
-      },
-    });
-    await tx.workflowEvent.create({
-      data: {
-        opportunityId: id,
-        deStage: proposta.stage,
-        paraStage: para,
-        userId: ator.id,
-        observacao: observacao || null,
-      },
-    });
+  await executarMovimentacao(proposta, para, ator.id, {
+    observacao,
+    motivoPerda: precisaMotivo ? motivoPerda : undefined,
   });
-
-  // Avisa os gestores da área que passa a ser dona da fila (para delegarem)
-  if (donoNovo && mudouDeMaos) {
-    await notificarArea(
-      donoNovo,
-      `${proposta.codigo} · ${proposta.cliente.nome} — ${FILA_TITULOS[para]?.toLowerCase()}`,
-      `/propostas/${id}`,
-      { excetoUserId: ator.id, apenasGestores: true },
-    );
-  }
-
-  // Aceite gera o contrato automaticamente (vigência inicial de 12 meses).
-  if (para === "ACEITA") {
-    const existente = await prisma.contract.findUnique({ where: { opportunityId: id } });
-    if (!existente) {
-      const inicio = new Date();
-      const fim = new Date(inicio);
-      fim.setFullYear(fim.getFullYear() + 1);
-      const contrato = await prisma.contract.create({
-        data: {
-          opportunityId: id,
-          numero: await proximoCodigo("CTR"),
-          inicioVigencia: inicio,
-          fimVigencia: fim,
-          valor: proposta.valorEstimado ?? 0,
-        },
-      });
-      await Promise.all([
-        notificarArea(
-          "CONTRATOS",
-          `Contrato ${contrato.numero} criado — ${proposta.cliente.nome} (${proposta.codigo})`,
-          `/propostas/${id}`,
-          { excetoUserId: ator.id, apenasGestores: true },
-        ),
-        notificarArea(
-          "FATURAMENTO",
-          `Contrato ${contrato.numero} ativo — gerar atestações de ${proposta.cliente.nome}`,
-          `/filas/faturamento`,
-          { excetoUserId: ator.id, apenasGestores: true },
-        ),
-      ]);
-    }
-  }
 
   revalidatePath("/");
   revalidatePath(`/propostas/${id}`);
@@ -183,6 +203,76 @@ export async function moverProposta(formData: FormData) {
   // sem isso, um ?erro= de uma tentativa anterior (ex.: motivo_obrigatorio)
   // continuaria na barra de endereço e o banner ficaria exibido após um sucesso.
   if (formData.get("voltarLimpo")) redirect(`/propostas/${id}`);
+}
+
+/** Move várias propostas de uma vez para a mesma etapa (ação em massa na
+ * fila). Mesma regra de permissão e transição válida da movimentação
+ * individual, aplicada item a item — o que não atende (etapa diferente,
+ * sem permissão) é ignorado silenciosamente. Recusa/cancelamento exigem
+ * motivo e por isso não entram aqui: seguem só pela página da proposta. */
+export async function moverPropostasEmMassa(formData: FormData) {
+  const ids = formData.getAll("ids").map(String).filter(Boolean);
+  const para = String(formData.get("para") ?? "") as Stage;
+  if (ids.length === 0 || !para || para === "RECUSADA" || para === "CANCELADA") return;
+
+  const ator = await obterSessao();
+  if (!ator) return;
+
+  const propostas = await prisma.opportunity.findMany({
+    where: { id: { in: ids } },
+    include: { cliente: { select: { nome: true } } },
+  });
+
+  for (const proposta of propostas) {
+    const transicao = TRANSITIONS[proposta.stage]?.find((t) => t.para === para);
+    if (!transicao) continue;
+    if (!podeAtuar(ator, transicao.area, proposta.responsavelId)) continue;
+    await executarMovimentacao(proposta, para, ator.id);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/filas", "layout");
+}
+
+/** Delega várias propostas de uma vez à mesma pessoa (ação em massa na
+ * fila). Mesma regra da delegação individual — só o gestor da fila dona da
+ * etapa atual, e só para alguém ativo da área certa — item a item. */
+export async function delegarPropostasEmMassa(formData: FormData) {
+  const ids = formData.getAll("ids").map(String).filter(Boolean);
+  const userId = String(formData.get("userId") ?? "");
+  if (ids.length === 0) return;
+
+  const sessao = await obterSessao();
+  if (!sessao) return;
+
+  const [propostas, destino] = await Promise.all([
+    prisma.opportunity.findMany({
+      where: { id: { in: ids } },
+      include: { cliente: { select: { nome: true } } },
+    }),
+    userId ? prisma.user.findUnique({ where: { id: userId } }) : Promise.resolve(null),
+  ]);
+
+  for (const proposta of propostas) {
+    const dona = FILA_DONA[proposta.stage];
+    if (!dona || !ehGestor(sessao, dona)) continue;
+
+    if (!userId) {
+      await prisma.opportunity.update({ where: { id: proposta.id }, data: { responsavelId: null } });
+      continue;
+    }
+    if (!destino || !destino.ativo || destino.area !== dona) continue;
+    await prisma.opportunity.update({ where: { id: proposta.id }, data: { responsavelId: userId } });
+    if (userId !== sessao.id) {
+      await notificarUsuario(
+        userId,
+        `${proposta.codigo} · ${proposta.cliente.nome} — delegada para você`,
+        `/propostas/${proposta.id}`,
+      );
+    }
+  }
+
+  revalidatePath("/filas", "layout");
 }
 
 /** Gestor da área dona da fila delega a proposta a alguém da equipe. */

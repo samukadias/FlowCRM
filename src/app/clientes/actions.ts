@@ -26,16 +26,7 @@ function normalizar(formData: FormData) {
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
-  const contatoNome = String(formData.get("contatoNome") ?? "").trim();
-  const contatoEmail = String(formData.get("contatoEmail") ?? "").trim();
-  const contatoTelefone = String(formData.get("contatoTelefone") ?? "").trim();
-  return {
-    nome,
-    sigla,
-    contatoNome: contatoNome || null,
-    contatoEmail: contatoEmail || null,
-    contatoTelefone: contatoTelefone || null,
-  };
+  return { nome, sigla };
 }
 
 export async function criarCliente(formData: FormData) {
@@ -86,4 +77,50 @@ export async function excluirCliente(formData: FormData) {
 
   await prisma.cliente.delete({ where: { id } });
   revalidatePath("/clientes");
+}
+
+function normalizarContato(formData: FormData) {
+  const nome = String(formData.get("nome") ?? "").trim();
+  const cargo = String(formData.get("cargo") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
+  const telefone = String(formData.get("telefone") ?? "").trim();
+  return { nome, cargo: cargo || null, email: email || null, telefone: telefone || null };
+}
+
+/** Adiciona um contato ao cliente. O primeiro cadastrado vira o principal. */
+export async function criarContato(formData: FormData) {
+  if (!podeGerirClientes(await obterSessao())) return;
+  const clienteId = String(formData.get("clienteId") ?? "");
+  const dados = normalizarContato(formData);
+  if (!clienteId || !dados.nome) return;
+
+  const jaTemPrincipal = await prisma.contact.count({ where: { clienteId, principal: true } });
+  await prisma.contact.create({ data: { ...dados, clienteId, principal: jaTemPrincipal === 0 } });
+
+  revalidatePath(`/clientes/${clienteId}`);
+}
+
+/** Marca um contato como o principal do cliente — só um por vez. */
+export async function definirContatoPrincipal(formData: FormData) {
+  if (!podeGerirClientes(await obterSessao())) return;
+  const id = String(formData.get("id") ?? "");
+  const clienteId = String(formData.get("clienteId") ?? "");
+  if (!id || !clienteId) return;
+
+  await prisma.$transaction([
+    prisma.contact.updateMany({ where: { clienteId }, data: { principal: false } }),
+    prisma.contact.update({ where: { id }, data: { principal: true } }),
+  ]);
+
+  revalidatePath(`/clientes/${clienteId}`);
+}
+
+export async function excluirContato(formData: FormData) {
+  if (!podeGerirClientes(await obterSessao())) return;
+  const id = String(formData.get("id") ?? "");
+  const clienteId = String(formData.get("clienteId") ?? "");
+  if (!id) return;
+
+  await prisma.contact.delete({ where: { id } });
+  revalidatePath(`/clientes/${clienteId}`);
 }

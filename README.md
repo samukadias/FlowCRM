@@ -155,3 +155,8 @@ src/test/              → infraestrutura de teste (banco, fixtures, mocks do Ne
 - [x] Visão Kanban com arrastar-e-soltar na tela principal (alternável com a Lista via `?view=kanban`), colunas só do funil ativo; drop só é aceito se a transição for permitida para quem está logado
 - [x] Tarefas/lembretes: avulsas ou ligadas a uma proposta, com prazo, responsável e delegação; página "Minhas tarefas", badge de pendências na navegação e checagem horária de tarefas vencidas (`instrumentation.ts`)
 - [x] Pipeline ponderado (forecast) em /relatorios: probabilidade padrão de fechamento por etapa (`STAGE_META`), valor ponderado no lugar do bruto e detalhamento por etapa
+- [x] Desempenho por responsável em /relatorios: ranking de quem registrou cada proposta, com quantidade, valor total, taxa de aceite e pipeline ponderado
+- [x] Busca global (⌘K/Ctrl+K) em qualquer tela: propostas, clientes e pessoas, com navegação por teclado; clicar numa pessoa filtra as propostas sob a responsabilidade dela
+- [x] Ações em massa nas Filas: selecionar várias propostas de uma seção (mesma etapa) e mover ou delegar todas de uma vez, com a mesma regra de permissão da ação individual aplicada item a item
+- [x] Múltiplos contatos por cliente (entidade `Contact` própria, com um principal em destaque) e histórico consolidado por cliente em /clientes/[id]: todas as propostas e a atividade (mudanças de etapa, e-mails, notas, anexos) das propostas daquele cliente num só lugar
+- [x] Motor de automação configurável: o limiar fixo de 10 dias do alerta de estagnação virou regras editáveis em /automacoes (só ADMIN) — nome, etapa (ou "qualquer etapa"), dias parada e ativa/inativa; a checagem horária usa a regra específica da etapa quando existe, senão a regra coringa

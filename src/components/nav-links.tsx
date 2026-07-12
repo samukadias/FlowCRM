@@ -9,6 +9,7 @@ import {
   FileText,
   ListTodo,
   UsersRound,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -56,6 +57,13 @@ const usuariosItem: Item = {
   ativo: (p) => p.startsWith("/usuarios"),
 };
 
+const automacoesItem: Item = {
+  href: "/automacoes",
+  label: "Automações",
+  icone: Zap,
+  ativo: (p) => p.startsWith("/automacoes"),
+};
+
 const tarefasItem: Item = {
   href: "/tarefas",
   label: "Tarefas",
@@ -80,7 +88,7 @@ export function NavLinks({
     { ...tarefasItem, contador: tarefasPendentes },
     ...(gestor ? [relatorios] : []),
     ...(clientes ? [clientesItem] : []),
-    ...(admin ? [usuariosItem] : []),
+    ...(admin ? [usuariosItem, automacoesItem] : []),
   ];
   return (
     <nav className="flex items-center gap-0.5 overflow-x-auto text-sm whitespace-nowrap">

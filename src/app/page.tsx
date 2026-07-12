@@ -24,9 +24,9 @@ function urlBusca(q: string | undefined, etapa: string | undefined, view?: strin
 export default async function BuscaPropostas({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; etapa?: string; view?: string }>;
+  searchParams: Promise<{ q?: string; etapa?: string; view?: string; responsavel?: string }>;
 }) {
-  const { q, etapa, view } = await searchParams;
+  const { q, etapa, view, responsavel } = await searchParams;
   const visao = view === "kanban" ? "kanban" : "lista";
   const etapaValida = etapa && etapa in STAGE_META ? (etapa as Stage) : undefined;
   const sessao = await obterSessao();
@@ -55,11 +55,12 @@ export default async function BuscaPropostas({
       : etapaValida
         ? { stage: etapaValida }
         : {};
+  const filtroResponsavel = responsavel ? { responsavelId: responsavel } : {};
 
-  const [propostas, porEtapa, clientesEncontrados] = await Promise.all([
+  const [propostas, porEtapa, clientesEncontrados, pessoaFiltrada] = await Promise.all([
     prisma.opportunity.findMany({
       where: {
-        AND: [visiveis, filtroTexto, filtroEtapa],
+        AND: [visiveis, filtroTexto, filtroEtapa, filtroResponsavel],
       },
       include: {
         cliente: { select: { nome: true } },
@@ -76,7 +77,7 @@ export default async function BuscaPropostas({
     }),
     prisma.opportunity.groupBy({
       by: ["stage"],
-      where: { AND: [visiveis, filtroTexto] },
+      where: { AND: [visiveis, filtroTexto, filtroResponsavel] },
       _count: true,
     }),
     termo
@@ -92,6 +93,9 @@ export default async function BuscaPropostas({
           take: 3,
         })
       : Promise.resolve([]),
+    responsavel
+      ? prisma.user.findUnique({ where: { id: responsavel }, select: { name: true } })
+      : Promise.resolve(null),
   ]);
 
   const contagem = new Map(porEtapa.map((g) => [g.stage, g._count]));
@@ -133,6 +137,15 @@ export default async function BuscaPropostas({
             )}
             {analista && (
               <span className="text-faint"> · com o seu envolvimento</span>
+            )}
+            {pessoaFiltrada && (
+              <>
+                {" · responsável: "}
+                <span className="font-medium text-ink">{pessoaFiltrada.name}</span>{" "}
+                <Link href={urlBusca(q, etapaValida, visao)} className="text-brand hover:underline">
+                  limpar
+                </Link>
+              </>
             )}
           </p>
         </div>

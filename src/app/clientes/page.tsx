@@ -18,7 +18,10 @@ export default async function Clientes() {
   if (!pode) redirect("/");
 
   const clientes = await prisma.cliente.findMany({
-    include: { _count: { select: { propostas: true } } },
+    include: {
+      _count: { select: { propostas: true } },
+      contatos: { where: { principal: true }, take: 1 },
+    },
     orderBy: { nome: "asc" },
   });
 
@@ -54,12 +57,12 @@ export default async function Clientes() {
             >
               <span className="font-mono text-xs font-medium">{c.sigla}</span>
               <p className="truncate text-sm font-medium">{c.nome}</p>
-              {c.contatoNome || c.contatoEmail || c.contatoTelefone ? (
+              {c.contatos[0] ? (
                 <div className="min-w-0 text-xs text-muted">
-                  {c.contatoNome && <p className="truncate">{c.contatoNome}</p>}
-                  {(c.contatoEmail || c.contatoTelefone) && (
+                  <p className="truncate">{c.contatos[0].nome}</p>
+                  {(c.contatos[0].email || c.contatos[0].telefone) && (
                     <p className="truncate text-faint">
-                      {[c.contatoEmail, c.contatoTelefone].filter(Boolean).join(" · ")}
+                      {[c.contatos[0].email, c.contatos[0].telefone].filter(Boolean).join(" · ")}
                     </p>
                   )}
                 </div>

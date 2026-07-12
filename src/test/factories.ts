@@ -54,3 +54,19 @@ export async function criarProposta(params: {
     include: { cliente: { select: { nome: true } } },
   });
 }
+
+export async function criarRegraAutomacao(params: {
+  diasLimite: number;
+  stage?: Stage | null;
+  ativo?: boolean;
+  nome?: string;
+}) {
+  return prisma.automationRule.create({
+    data: {
+      nome: params.nome ?? `Regra teste ${sufixo()}`,
+      stage: params.stage ?? null,
+      diasLimite: params.diasLimite,
+      ativo: params.ativo ?? true,
+    },
+  });
+}
