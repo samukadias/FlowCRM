@@ -29,17 +29,64 @@ export const STAGE_META: Record<
     pos: number;
     tone: Tone;
     terminal?: boolean;
+    /** Probabilidade padrão de fechamento nesta etapa (0–100), para o forecast ponderado. */
+    probabilidade: number;
   }
 > = {
-  ENTRADA: { label: "Entrada", quem: "Comercial", pos: 0, tone: "progress" },
-  EM_TRATATIVA: { label: "Em tratativa", quem: "Propostas", pos: 1, tone: "progress" },
-  EM_VERIFICACAO: { label: "Em verificação", quem: "Delivery", pos: 2, tone: "progress" },
-  AJUSTES: { label: "Em ajustes", quem: "Propostas", pos: 1, tone: "warn" },
-  PROPOSTA_PRONTA: { label: "Proposta pronta", quem: "Comercial", pos: 3, tone: "progress" },
-  ENVIADA_CLIENTE: { label: "Enviada ao cliente", quem: "Cliente", pos: 4, tone: "progress" },
-  ACEITA: { label: "Aceita", quem: "Contratos", pos: 5, tone: "success", terminal: true },
-  RECUSADA: { label: "Recusada", quem: "Comercial", pos: 4, tone: "danger", terminal: true },
-  CANCELADA: { label: "Cancelada", quem: "Comercial", pos: 2, tone: "neutral", terminal: true },
+  ENTRADA: { label: "Entrada", quem: "Comercial", pos: 0, tone: "progress", probabilidade: 10 },
+  EM_TRATATIVA: {
+    label: "Em tratativa",
+    quem: "Propostas",
+    pos: 1,
+    tone: "progress",
+    probabilidade: 25,
+  },
+  EM_VERIFICACAO: {
+    label: "Em verificação",
+    quem: "Delivery",
+    pos: 2,
+    tone: "progress",
+    probabilidade: 40,
+  },
+  AJUSTES: { label: "Em ajustes", quem: "Propostas", pos: 1, tone: "warn", probabilidade: 25 },
+  PROPOSTA_PRONTA: {
+    label: "Proposta pronta",
+    quem: "Comercial",
+    pos: 3,
+    tone: "progress",
+    probabilidade: 60,
+  },
+  ENVIADA_CLIENTE: {
+    label: "Enviada ao cliente",
+    quem: "Cliente",
+    pos: 4,
+    tone: "progress",
+    probabilidade: 75,
+  },
+  ACEITA: {
+    label: "Aceita",
+    quem: "Contratos",
+    pos: 5,
+    tone: "success",
+    terminal: true,
+    probabilidade: 100,
+  },
+  RECUSADA: {
+    label: "Recusada",
+    quem: "Comercial",
+    pos: 4,
+    tone: "danger",
+    terminal: true,
+    probabilidade: 0,
+  },
+  CANCELADA: {
+    label: "Cancelada",
+    quem: "Comercial",
+    pos: 2,
+    tone: "neutral",
+    terminal: true,
+    probabilidade: 0,
+  },
 };
 
 /** Ordem das etapas nos filtros da busca. */

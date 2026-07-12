@@ -157,6 +157,16 @@ export default async function Relatorios({
 
   const emAndamento = opps.filter((o) => !STAGE_META[o.stage].terminal);
   const valorAndamento = emAndamento.reduce((s, o) => s + Number(o.valorEstimado ?? 0), 0);
+  const valorPonderado = emAndamento.reduce(
+    (s, o) => s + (Number(o.valorEstimado ?? 0) * STAGE_META[o.stage].probabilidade) / 100,
+    0,
+  );
+  const ponderadoPorEtapa = FUNIL.filter((e) => !STAGE_META[e].terminal).map((etapa) => ({
+    etapa,
+    valor: emAndamento
+      .filter((o) => o.stage === etapa)
+      .reduce((s, o) => s + (Number(o.valorEstimado ?? 0) * STAGE_META[etapa].probabilidade) / 100, 0),
+  }));
   const valorContratado = contratos.reduce((s, c) => s + Number(c.valor), 0);
   const faturado = atestacoes
     .filter((a) => a.status === "FATURADA")
@@ -227,7 +237,7 @@ export default async function Relatorios({
         ))}
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatTile
           label="Taxa de aceite"
           value={taxaAceite != null ? `${taxaAceite}%` : "—"}
@@ -241,6 +251,11 @@ export default async function Relatorios({
           label="Em andamento"
           value={brlCompacto.format(valorAndamento)}
           detail={`${emAndamento.length} proposta${emAndamento.length === 1 ? "" : "s"} no funil`}
+        />
+        <StatTile
+          label="Pipeline ponderado"
+          value={brlCompacto.format(valorPonderado)}
+          detail="valor × probabilidade por etapa"
         />
         <StatTile
           label="Contratado"
@@ -298,6 +313,26 @@ export default async function Relatorios({
       </div>
 
       <section className="card mt-10 p-6">
+        <h2 className="text-sm font-semibold">Pipeline ponderado por etapa</h2>
+        <p className="mt-0.5 text-xs text-muted">
+          Valor estimado de cada etapa, ajustado pela probabilidade padrão de fechamento
+        </p>
+        {valorPonderado > 0 ? (
+          <Barras
+            dados={ponderadoPorEtapa
+              .filter((p) => p.valor > 0)
+              .map((p) => ({
+                rotulo: `${STAGE_META[p.etapa].label} (${STAGE_META[p.etapa].probabilidade}%)`,
+                valor: p.valor,
+                texto: brlCompacto.format(p.valor),
+              }))}
+          />
+        ) : (
+          <p className="mt-4 text-sm text-muted">Nenhuma proposta em andamento no período.</p>
+        )}
+      </section>
+
+      <section className="card mt-10 p-6">
         <h2 className="text-sm font-semibold">Motivos de perda</h2>
         <p className="mt-0.5 text-xs text-muted">
           {perdidas > 0
@@ -322,8 +357,9 @@ export default async function Relatorios({
       </section>
 
       <p className="mt-6 text-xs text-faint">
-        Valores em andamento: {brl.format(valorAndamento)} · contratado:{" "}
-        {brl.format(valorContratado)} · faturado: {brl.format(faturado)}.
+        Valores em andamento: {brl.format(valorAndamento)} · ponderado:{" "}
+        {brl.format(valorPonderado)} · contratado: {brl.format(valorContratado)} · faturado:{" "}
+        {brl.format(faturado)}.
       </p>
     </div>
   );

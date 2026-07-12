@@ -154,3 +154,4 @@ src/test/              → infraestrutura de teste (banco, fixtures, mocks do Ne
 - [x] Busca da tela principal também encontra clientes cadastrados (nome ou sigla), com atalho direto para o cadastro
 - [x] Visão Kanban com arrastar-e-soltar na tela principal (alternável com a Lista via `?view=kanban`), colunas só do funil ativo; drop só é aceito se a transição for permitida para quem está logado
 - [x] Tarefas/lembretes: avulsas ou ligadas a uma proposta, com prazo, responsável e delegação; página "Minhas tarefas", badge de pendências na navegação e checagem horária de tarefas vencidas (`instrumentation.ts`)
+- [x] Pipeline ponderado (forecast) em /relatorios: probabilidade padrão de fechamento por etapa (`STAGE_META`), valor ponderado no lugar do bruto e detalhamento por etapa
