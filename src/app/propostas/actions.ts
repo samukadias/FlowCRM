@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import type { Stage } from "@/generated/prisma/enums";
-import { FILA_DONA, FILA_TITULOS, TRANSITIONS } from "@/lib/flow";
+import type { MotivoPerda, Stage } from "@/generated/prisma/enums";
+import { FILA_DONA, FILA_TITULOS, MOTIVO_PERDA_LABELS, TRANSITIONS } from "@/lib/flow";
 import { ehGestor, obterSessao, podeAgir, podeAtuar } from "@/lib/auth";
 import { notificarArea, notificarUsuario } from "@/lib/notificar";
 import { filtroPropostasVisiveis } from "@/lib/visibilidade";
@@ -86,6 +86,7 @@ export async function moverProposta(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const para = String(formData.get("para") ?? "") as Stage;
   const observacao = String(formData.get("observacao") ?? "").trim();
+  const motivoPerda = (String(formData.get("motivoPerda") ?? "") || null) as MotivoPerda | null;
 
   const proposta = await prisma.opportunity.findUniqueOrThrow({
     where: { id },
@@ -98,6 +99,12 @@ export async function moverProposta(formData: FormData) {
   const ator = await obterSessao();
   if (!ator || !podeAtuar(ator, transicao.area, proposta.responsavelId)) return;
 
+  // Recusa/cancelamento exigem um motivo — alimenta o relatório de perdas
+  const precisaMotivo = para === "RECUSADA" || para === "CANCELADA";
+  if (precisaMotivo && (!motivoPerda || !(motivoPerda in MOTIVO_PERDA_LABELS))) {
+    redirect(`/propostas/${id}?erro=motivo_obrigatorio`);
+  }
+
   // Ao mudar de área, o responsável zera até o gestor da nova fila delegar
   const donoNovo = FILA_DONA[para];
   const mudouDeMaos = donoNovo !== FILA_DONA[proposta.stage];
@@ -105,7 +112,11 @@ export async function moverProposta(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     await tx.opportunity.update({
       where: { id },
-      data: { stage: para, ...(mudouDeMaos ? { responsavelId: null } : {}) },
+      data: {
+        stage: para,
+        ...(mudouDeMaos ? { responsavelId: null } : {}),
+        ...(precisaMotivo ? { motivoPerda } : {}),
+      },
     });
     await tx.workflowEvent.create({
       data: {
@@ -164,6 +175,12 @@ export async function moverProposta(formData: FormData) {
   revalidatePath("/");
   revalidatePath(`/propostas/${id}`);
   revalidatePath("/filas", "layout");
+
+  // Esta ação também é usada nos botões rápidos da fila (que devem
+  // permanecer na lista). Só a página da proposta pede a URL limpa —
+  // sem isso, um ?erro= de uma tentativa anterior (ex.: motivo_obrigatorio)
+  // continuaria na barra de endereço e o banner ficaria exibido após um sucesso.
+  if (formData.get("voltarLimpo")) redirect(`/propostas/${id}`);
 }
 
 /** Gestor da área dona da fila delega a proposta a alguém da equipe. */
@@ -225,6 +242,7 @@ export async function registrarNota(formData: FormData) {
   });
 
   revalidatePath(`/propostas/${id}`);
+  redirect(`/propostas/${id}`);
 }
 
 /** Registra a troca de um e-mail com o cliente na timeline da proposta. */
@@ -240,6 +258,7 @@ export async function registrarEmail(formData: FormData) {
   });
 
   revalidatePath(`/propostas/${id}`);
+  redirect(`/propostas/${id}`);
 }
 
 /** Anexa um arquivo à proposta (PDF, Office, imagem, CSV, TXT ou ZIP; até 15 MB). */
@@ -270,4 +289,5 @@ export async function anexarArquivo(formData: FormData) {
   });
 
   revalidatePath(`/propostas/${id}`);
+  redirect(`/propostas/${id}`);
 }

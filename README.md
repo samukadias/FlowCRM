@@ -146,3 +146,6 @@ src/test/              → infraestrutura de teste (banco, fixtures, mocks do Ne
 - [x] Cadastro de clientes (nome + sigla) gerido por admin/gestor de Propostas; proposta escolhe cliente da lista
 - [x] Nota interna, log de e-mail e anexo na timeline da proposta
 - [x] Suíte de testes (Vitest): permissões, visibilidade, integridade do fluxo e integração das ações críticas contra banco real
+- [x] Contato principal (nome, e-mail, telefone) no cadastro de cliente
+- [x] Motivo obrigatório ao recusar/cancelar uma proposta (exigido só na página da proposta; fila mantém as ações rápidas sem motivo)
+- [x] Relatório de motivos de perda em /relatorios, respeitando o filtro de período

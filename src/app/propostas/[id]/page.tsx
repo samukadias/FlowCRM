@@ -6,6 +6,7 @@ import {
   ATESTACAO_META,
   FILA_DONA,
   HEALTH_META,
+  MOTIVO_PERDA_LABELS,
   STAGE_META,
   TONE_COLOR,
   TRANSITIONS,
@@ -36,6 +37,7 @@ const MENSAGENS_ERRO: Record<string, string> = {
   anexo_invalido:
     "Não foi possível anexar o arquivo. Confira o formato (PDF, Office, imagem, CSV, TXT ou ZIP) e o tamanho (até 15 MB).",
   anexo_falhou: "Não foi possível salvar o anexo. Tente novamente.",
+  motivo_obrigatorio: "Selecione o motivo antes de registrar a recusa ou o cancelamento.",
 };
 
 export default async function DetalheProposta({
@@ -148,6 +150,15 @@ export default async function DetalheProposta({
         </div>
       </div>
 
+      {erro && MENSAGENS_ERRO[erro] && (
+        <p
+          role="alert"
+          className="mt-5 rounded-lg bg-danger-soft px-3 py-2.5 text-sm font-medium text-danger"
+        >
+          {MENSAGENS_ERRO[erro]}
+        </p>
+      )}
+
       <section className="card mt-8 px-6 pt-7 pb-5">
         <FlowTrack stage={p.stage} size="lg" />
         <div className="mt-5 border-t border-line pt-4">
@@ -163,16 +174,39 @@ export default async function DetalheProposta({
               ) : (
                 <> · <span className="font-medium text-warn">sem responsável</span></>
               ))}
+            {p.motivoPerda && (
+              <> · motivo: <strong className="font-medium text-ink">{MOTIVO_PERDA_LABELS[p.motivoPerda]}</strong></>
+            )}
           </p>
           {acoes.length > 0 && (
             <form action={moverProposta} className="mt-4 flex flex-wrap items-center gap-2.5">
               <input type="hidden" name="id" value={p.id} />
+              <input type="hidden" name="voltarLimpo" value="1" />
               <input
                 name="observacao"
                 placeholder="Observação (opcional)"
                 aria-label="Observação da movimentação"
                 className="h-9 min-w-52 flex-1 rounded-lg border border-line bg-canvas px-3 text-sm outline-none placeholder:text-muted focus:border-brand focus:ring-2 focus:ring-brand/25"
               />
+              {acoes.some((t) => t.para === "RECUSADA" || t.para === "CANCELADA") && (
+                <select
+                  name="motivoPerda"
+                  defaultValue=""
+                  aria-label="Motivo, obrigatório para recusar ou cancelar"
+                  className="h-9 rounded-lg border border-line bg-canvas px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/25"
+                >
+                  <option value="" disabled>
+                    Motivo (recusa/cancelamento)
+                  </option>
+                  {(Object.entries(MOTIVO_PERDA_LABELS) as [keyof typeof MOTIVO_PERDA_LABELS, string][]).map(
+                    ([valor, rotulo]) => (
+                      <option key={valor} value={valor}>
+                        {rotulo}
+                      </option>
+                    ),
+                  )}
+                </select>
+              )}
               {acoes.map((t) =>
                 t.destrutiva ? (
                   <button
@@ -231,15 +265,6 @@ export default async function DetalheProposta({
       <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section>
           <h2 className="text-sm font-semibold">Histórico</h2>
-
-          {erro && MENSAGENS_ERRO[erro] && (
-            <p
-              role="alert"
-              className="mt-4 rounded-lg bg-danger-soft px-3 py-2.5 text-sm font-medium text-danger"
-            >
-              {MENSAGENS_ERRO[erro]}
-            </p>
-          )}
 
           <div className="card mt-4 divide-y divide-line-soft">
             <form action={registrarNota} className="flex flex-col gap-2 p-4">

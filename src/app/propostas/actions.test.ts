@@ -281,9 +281,69 @@ describe("moverProposta", () => {
     const fd = new FormData();
     fd.set("id", proposta.id);
     fd.set("para", "RECUSADA");
+    fd.set("motivoPerda", "PRECO");
     await moverProposta(fd);
 
     expect(await prisma.contract.count()).toBe(0);
+  });
+
+  it("recusar sem selecionar motivo é barrado e não muda a etapa", async () => {
+    const { comercial, cliente } = await cenarioBase();
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: comercial.id,
+      stage: "ENVIADA_CLIENTE",
+    });
+    logarComo(sessaoDe(comercial));
+
+    const fd = new FormData();
+    fd.set("id", proposta.id);
+    fd.set("para", "RECUSADA");
+    await expect(moverProposta(fd)).rejects.toBeInstanceOf(RedirectError);
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.stage).toBe("ENVIADA_CLIENTE");
+    expect(atual.motivoPerda).toBeNull();
+  });
+
+  it("recusa com motivo válido grava o motivo na proposta", async () => {
+    const { comercial, cliente } = await cenarioBase();
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: comercial.id,
+      stage: "ENVIADA_CLIENTE",
+    });
+    logarComo(sessaoDe(comercial));
+
+    const fd = new FormData();
+    fd.set("id", proposta.id);
+    fd.set("para", "RECUSADA");
+    fd.set("motivoPerda", "CONCORRENCIA");
+    await moverProposta(fd);
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.stage).toBe("RECUSADA");
+    expect(atual.motivoPerda).toBe("CONCORRENCIA");
+  });
+
+  it("cancelamento também exige motivo", async () => {
+    const { comercial, cliente } = await cenarioBase();
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: comercial.id,
+      stage: "ENTRADA",
+    });
+    logarComo(sessaoDe(comercial));
+
+    const fd = new FormData();
+    fd.set("id", proposta.id);
+    fd.set("para", "CANCELADA");
+    fd.set("motivoPerda", "MUDANCA_PRIORIDADE");
+    await moverProposta(fd);
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.stage).toBe("CANCELADA");
+    expect(atual.motivoPerda).toBe("MUDANCA_PRIORIDADE");
   });
 });
 
@@ -412,7 +472,7 @@ describe("registrarNota / registrarEmail — exigem visibilidade sobre a propost
     const fd = new FormData();
     fd.set("id", proposta.id);
     fd.set("content", "Cliente perguntou sobre o prazo");
-    await registrarNota(fd);
+    await expect(registrarNota(fd)).rejects.toBeInstanceOf(RedirectError);
 
     const evento = await prisma.workflowEvent.findFirstOrThrow({
       where: { eventType: "NOTE" },
@@ -435,7 +495,7 @@ describe("registrarNota / registrarEmail — exigem visibilidade sobre a propost
     fd.set("id", proposta.id);
     fd.set("subject", "Envio da proposta");
     fd.set("content", "Segue em anexo.");
-    await registrarEmail(fd);
+    await expect(registrarEmail(fd)).rejects.toBeInstanceOf(RedirectError);
 
     const evento = await prisma.workflowEvent.findFirstOrThrow({
       where: { eventType: "EMAIL" },

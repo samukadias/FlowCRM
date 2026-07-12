@@ -4,6 +4,7 @@ import type {
   AttestationStatus,
   HealthStatus,
   Perfil,
+  MotivoPerda,
 } from "@/generated/prisma/enums";
 
 export type Tone = "progress" | "success" | "warn" | "danger" | "neutral";
@@ -160,6 +161,20 @@ export const ATESTACAO_ACOES: Partial<
 export const PERFIL_LABELS: Record<Perfil, string> = {
   ANALISTA: "Analista",
   GESTOR: "Gestor",
+};
+
+/** Etapas cujo motivo de perda é coletado ao mover a proposta para lá. */
+export const ETAPAS_COM_MOTIVO: Stage[] = ["RECUSADA", "CANCELADA"];
+
+export const MOTIVO_PERDA_LABELS: Record<MotivoPerda, string> = {
+  PRECO: "Preço/orçamento",
+  CONCORRENCIA: "Escolheu concorrente",
+  PRAZO: "Prazo incompatível",
+  ESCOPO: "Escopo não atendeu",
+  SEM_ORCAMENTO: "Cliente sem orçamento",
+  SEM_RETORNO: "Cliente parou de responder",
+  MUDANCA_PRIORIDADE: "Mudança de prioridade do cliente",
+  OUTRO: "Outro",
 };
 
 export const TONE_COLOR: Record<Tone, string> = {

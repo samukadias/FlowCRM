@@ -67,6 +67,11 @@ model Cliente {
   sigla     String   @unique // código curto, ex.: TECHNOVA
   createdAt DateTime @default(now())
 
+  // Contato principal — opcional, nem todo cliente é cadastrado já com um
+  contatoNome     String?
+  contatoEmail    String?
+  contatoTelefone String?
+
   propostas Opportunity[]
 }
 
@@ -84,6 +89,19 @@ enum Stage {
   CANCELADA
 }
 
+// Coletado ao mover a proposta para RECUSADA ou CANCELADA — alimenta o
+// relatório de motivos de perda.
+enum MotivoPerda {
+  PRECO
+  CONCORRENCIA
+  PRAZO
+  ESCOPO
+  SEM_ORCAMENTO
+  SEM_RETORNO
+  MUDANCA_PRIORIDADE
+  OUTRO
+}
+
 model Opportunity {
   id            String   @id @default(cuid())
   codigo        String   @unique // ex: OPP-2026-0001
@@ -99,6 +117,8 @@ model Opportunity {
   // Zera quando a proposta muda de área.
   responsavelId String?
   responsavel   User?    @relation("ResponsavelProposta", fields: [responsavelId], references: [id])
+  // Só preenchido ao mover para RECUSADA ou CANCELADA
+  motivoPerda   MotivoPerda?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

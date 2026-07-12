@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import type { Stage } from "@/generated/prisma/enums";
-import { STAGE_META } from "@/lib/flow";
+import type { MotivoPerda, Stage } from "@/generated/prisma/enums";
+import { MOTIVO_PERDA_LABELS, STAGE_META } from "@/lib/flow";
 import { brl, brlCompacto } from "@/lib/format";
 import { obterSessao } from "@/lib/auth";
 
@@ -76,13 +76,7 @@ function StatTile({
   );
 }
 
-function Barras({
-  dados,
-  formato,
-}: {
-  dados: { rotulo: string; valor: number; texto: string }[];
-  formato?: never;
-}) {
+function Barras({ dados }: { dados: { rotulo: string; valor: number; texto: string }[] }) {
   const max = Math.max(...dados.map((d) => d.valor), 1);
   return (
     <ul className="mt-4 space-y-2.5">
@@ -127,7 +121,7 @@ export default async function Relatorios({
   const [opps, eventos, contratos, atestacoes] = await Promise.all([
     prisma.opportunity.findMany({
       where: filtroProposta,
-      select: { id: true, stage: true, valorEstimado: true },
+      select: { id: true, stage: true, valorEstimado: true, motivoPerda: true },
     }),
     prisma.workflowEvent.findMany({
       where: inicio ? { opportunity: filtroProposta } : {},
@@ -147,8 +141,19 @@ export default async function Relatorios({
   // KPIs
   const aceitas = opps.filter((o) => o.stage === "ACEITA").length;
   const recusadas = opps.filter((o) => o.stage === "RECUSADA").length;
+  const canceladas = opps.filter((o) => o.stage === "CANCELADA").length;
   const decididas = aceitas + recusadas;
   const taxaAceite = decididas > 0 ? Math.round((aceitas / decididas) * 100) : null;
+
+  // Motivos de perda: recusa (cliente disse não) + cancelamento (decidimos não seguir)
+  const perdidas = recusadas + canceladas;
+  const porMotivo = (Object.keys(MOTIVO_PERDA_LABELS) as MotivoPerda[])
+    .map((motivo) => ({
+      motivo,
+      qtd: opps.filter((o) => o.motivoPerda === motivo).length,
+    }))
+    .filter((m) => m.qtd > 0)
+    .sort((a, b) => b.qtd - a.qtd);
 
   const emAndamento = opps.filter((o) => !STAGE_META[o.stage].terminal);
   const valorAndamento = emAndamento.reduce((s, o) => s + Number(o.valorEstimado ?? 0), 0);
@@ -291,6 +296,30 @@ export default async function Relatorios({
           )}
         </section>
       </div>
+
+      <section className="card mt-10 p-6">
+        <h2 className="text-sm font-semibold">Motivos de perda</h2>
+        <p className="mt-0.5 text-xs text-muted">
+          {perdidas > 0
+            ? `${perdidas} proposta${perdidas === 1 ? "" : "s"} recusada${perdidas === 1 ? "" : "s"} ou cancelada${perdidas === 1 ? "" : "s"} no período`
+            : "Nenhuma proposta recusada ou cancelada no período"}
+        </p>
+        {porMotivo.length > 0 ? (
+          <Barras
+            dados={porMotivo.map((m) => ({
+              rotulo: MOTIVO_PERDA_LABELS[m.motivo],
+              valor: m.qtd,
+              texto: `${m.qtd} · ${Math.round((m.qtd / perdidas) * 100)}%`,
+            }))}
+          />
+        ) : (
+          <p className="mt-4 text-sm text-muted">
+            {perdidas > 0
+              ? "As perdas registradas antes do motivo passar a ser obrigatório não têm essa informação."
+              : "Nada a mostrar por aqui — bom sinal."}
+          </p>
+        )}
+      </section>
 
       <p className="mt-6 text-xs text-faint">
         Valores em andamento: {brl.format(valorAndamento)} · contratado:{" "}

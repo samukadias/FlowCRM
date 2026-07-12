@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { obterSessao, type Sessao } from "@/lib/auth";
+
+/** true só quando a falha é de fato nome/sigla duplicados (violação de unicidade). */
+function ehConflitoDeUnicidade(erro: unknown): boolean {
+  return erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === "P2002";
+}
 
 /** Clientes são mantidos pelo administrador ou pelo gestor de Propostas. */
 function podeGerirClientes(sessao: Sessao | null): sessao is Sessao {
@@ -20,20 +26,29 @@ function normalizar(formData: FormData) {
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
-  return { nome, sigla };
+  const contatoNome = String(formData.get("contatoNome") ?? "").trim();
+  const contatoEmail = String(formData.get("contatoEmail") ?? "").trim();
+  const contatoTelefone = String(formData.get("contatoTelefone") ?? "").trim();
+  return {
+    nome,
+    sigla,
+    contatoNome: contatoNome || null,
+    contatoEmail: contatoEmail || null,
+    contatoTelefone: contatoTelefone || null,
+  };
 }
 
 export async function criarCliente(formData: FormData) {
   if (!podeGerirClientes(await obterSessao())) return;
-  const { nome, sigla } = normalizar(formData);
-  if (!nome || sigla.length < 2) redirect("/clientes/novo?erro=sigla");
+  const dados = normalizar(formData);
+  if (!dados.nome || dados.sigla.length < 2) redirect("/clientes/novo?erro=sigla");
 
   let criado = false;
   try {
-    await prisma.cliente.create({ data: { nome, sigla } });
+    await prisma.cliente.create({ data: dados });
     criado = true;
-  } catch {
-    // nome ou sigla já cadastrados (violação de unicidade)
+  } catch (erro) {
+    if (!ehConflitoDeUnicidade(erro)) throw erro;
   }
   if (!criado) redirect("/clientes/novo?erro=duplicado");
 
@@ -44,16 +59,16 @@ export async function criarCliente(formData: FormData) {
 export async function atualizarCliente(formData: FormData) {
   if (!podeGerirClientes(await obterSessao())) return;
   const id = String(formData.get("id") ?? "");
-  const { nome, sigla } = normalizar(formData);
+  const dados = normalizar(formData);
   if (!id) return;
-  if (!nome || sigla.length < 2) redirect(`/clientes/${id}?erro=sigla`);
+  if (!dados.nome || dados.sigla.length < 2) redirect(`/clientes/${id}?erro=sigla`);
 
   let atualizado = false;
   try {
-    await prisma.cliente.update({ where: { id }, data: { nome, sigla } });
+    await prisma.cliente.update({ where: { id }, data: dados });
     atualizado = true;
-  } catch {
-    // nome ou sigla já usados por outro cliente
+  } catch (erro) {
+    if (!ehConflitoDeUnicidade(erro)) throw erro;
   }
   if (!atualizado) redirect(`/clientes/${id}?erro=duplicado`);
 

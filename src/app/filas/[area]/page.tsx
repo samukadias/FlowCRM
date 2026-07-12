@@ -204,7 +204,9 @@ async function FilaPropostas({ area, sessao }: { area: Area; sessao: Sessao | nu
                         <form action={moverProposta} className="flex flex-wrap gap-2">
                           <input type="hidden" name="id" value={p.id} />
                           {(TRANSITIONS[p.stage] ?? [])
-                            .filter((t) => t.area === area)
+                            // Recusa/cancelamento exigem motivo — só na página da proposta,
+                            // onde há espaço para o seletor (não neste botão rápido da fila).
+                            .filter((t) => t.area === area && t.para !== "RECUSADA" && t.para !== "CANCELADA")
                             .map((t) => (
                               <button
                                 key={t.para}
@@ -216,6 +218,13 @@ async function FilaPropostas({ area, sessao }: { area: Area; sessao: Sessao | nu
                                 {t.rotulo}
                               </button>
                             ))}
+                          {(TRANSITIONS[p.stage] ?? []).some(
+                            (t) => t.area === area && (t.para === "RECUSADA" || t.para === "CANCELADA"),
+                          ) && (
+                            <a href={`/propostas/${p.id}`} className={`${btnNeutro} leading-8`}>
+                              Recusar/cancelar…
+                            </a>
+                          )}
                         </form>
                       ) : null}
                       {gestor && (

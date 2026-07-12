@@ -50,10 +50,22 @@ export default async function Clientes() {
           {clientes.map((c) => (
             <li
               key={c.id}
-              className="grid grid-cols-1 items-center gap-x-6 gap-y-3 px-5 py-3.5 md:grid-cols-[130px_minmax(0,1fr)_140px_120px_auto]"
+              className="grid grid-cols-1 items-center gap-x-6 gap-y-3 px-5 py-3.5 md:grid-cols-[130px_minmax(0,1fr)_170px_140px_120px_auto]"
             >
               <span className="font-mono text-xs font-medium">{c.sigla}</span>
               <p className="truncate text-sm font-medium">{c.nome}</p>
+              {c.contatoNome || c.contatoEmail || c.contatoTelefone ? (
+                <div className="min-w-0 text-xs text-muted">
+                  {c.contatoNome && <p className="truncate">{c.contatoNome}</p>}
+                  {(c.contatoEmail || c.contatoTelefone) && (
+                    <p className="truncate text-faint">
+                      {[c.contatoEmail, c.contatoTelefone].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <span className="text-xs text-faint">sem contato cadastrado</span>
+              )}
               <span className="text-xs text-muted tabular-nums">
                 {c._count.propostas === 1
                   ? "1 proposta"
