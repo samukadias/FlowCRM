@@ -210,11 +210,53 @@ model Esp {
   responsavel   User?     @relation(fields: [responsavelId], references: [id])
   pronta        Boolean   @default(false)
   prontaEm      DateTime?
+  // Relatório de projeto técnico (Word) anexado pelo analista responsável —
+  // um único documento por ESP, editável enquanto ela não estiver pronta.
+  relatorioNome     String?
+  relatorioTamanho  Int?
+  relatorioUrl      String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  itens EspItem[]
+
   // No máximo uma ESP de cada tipo por oportunidade
   @@unique([opportunityId, tipo])
+}
+
+// Catálogo de serviços/produtos de informática vendidos pela empresa —
+// mantido pelo ADMIN. Base de preço para os itens da PO nas ESPs.
+model ProdutoServico {
+  id                  String   @id @default(cuid())
+  nome                String   @unique
+  unidade             String // ex.: GB, certificado, licença, hora
+  valorUnitarioPadrao Decimal  @db.Decimal(14, 2)
+  ativo               Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  itens EspItem[]
+}
+
+// Linha da PO (Planilha Orçamentária) de uma ESP: quantidade recorrente
+// mensal de um produto/serviço do catálogo, pelo período contratual em
+// meses. O valor total do contrato para o item é quantidadeMensal ×
+// valorUnitario × periodoContratualMeses. valorUnitario pode divergir do
+// valorUnitarioPadrao do catálogo (preço negociado). Travado para edição
+// assim que a ESP é marcada como pronta.
+model EspItem {
+  id                     String         @id @default(cuid())
+  espId                  String
+  esp                    Esp            @relation(fields: [espId], references: [id], onDelete: Cascade)
+  produtoId              String
+  produto                ProdutoServico @relation(fields: [produtoId], references: [id])
+  quantidadeMensal       Decimal        @db.Decimal(12, 2)
+  periodoContratualMeses Int
+  valorUnitario          Decimal        @db.Decimal(14, 2)
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  @@index([espId])
 }
 
 // Regra configurável do alerta de estagnação (checagem horária em

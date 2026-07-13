@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  Boxes,
   Building2,
   CheckSquare,
   FileText,
@@ -63,6 +64,13 @@ const automacoesItem: Item = {
   ativo: (p) => p.startsWith("/automacoes"),
 };
 
+const catalogoItem: Item = {
+  href: "/catalogo",
+  label: "Catálogo",
+  icone: Boxes,
+  ativo: (p) => p.startsWith("/catalogo"),
+};
+
 const tarefasItem: Item = {
   href: "/tarefas",
   label: "Tarefas",
@@ -88,7 +96,7 @@ export function NavLinks({
     { ...tarefasItem, contador: tarefasPendentes },
     ...(gestor ? [relatorios] : []),
     ...(clientes ? [clientesItem] : []),
-    ...(admin ? [usuariosItem, automacoesItem] : []),
+    ...(admin ? [usuariosItem, automacoesItem, catalogoItem] : []),
   ];
   return (
     <nav className="flex items-center gap-0.5 overflow-x-auto text-sm whitespace-nowrap">

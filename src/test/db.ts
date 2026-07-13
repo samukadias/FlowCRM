@@ -9,6 +9,7 @@ export async function limparBanco() {
   await prisma.attestation.deleteMany();
   await prisma.contract.deleteMany();
   await prisma.esp.deleteMany();
+  await prisma.produtoServico.deleteMany();
   await prisma.workflowEvent.deleteMany();
   await prisma.opportunity.deleteMany();
   await prisma.cliente.deleteMany();

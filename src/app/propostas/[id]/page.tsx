@@ -22,14 +22,22 @@ import {
   registrarEmail,
   registrarNota,
 } from "@/app/propostas/actions";
-import { criarEsp, designarEsp, alternarEspPronta } from "@/app/propostas/esp-actions";
+import {
+  criarEsp,
+  designarEsp,
+  alternarEspPronta,
+  adicionarEspItem,
+  removerEspItem,
+  anexarRelatorioEsp,
+} from "@/app/propostas/esp-actions";
 import { espsPendentes } from "@/lib/esp";
 import { criarTarefa, concluirTarefa } from "@/app/tarefas/actions";
-import { brl, dataCurta, tempoRelativo } from "@/lib/format";
+import { brl, brlUnitario, dataCurta, tempoRelativo, tamanhoArquivo } from "@/lib/format";
 import { FlowTrack } from "@/components/flow-track";
 import { StageBadge } from "@/components/stage-badge";
 import { Pill } from "@/components/pill";
 import { CampoValor } from "@/components/campo-valor";
+import { CampoValorDecimal } from "@/components/campo-valor-decimal";
 import { ProposalTimeline, type TimelineItem } from "@/components/proposal-timeline";
 import { ehGestor, obterSessao, podeAtuar } from "@/lib/auth";
 import { filtroPropostasVisiveis } from "@/lib/visibilidade";
@@ -70,7 +78,13 @@ export default async function DetalheProposta({
       responsavel: { select: { name: true } },
       eventos: { orderBy: { createdAt: "desc" }, include: { user: true } },
       contrato: { include: { atestacoes: { orderBy: { competencia: "asc" } } } },
-      esps: { include: { responsavel: { select: { name: true } } }, orderBy: { tipo: "asc" } },
+      esps: {
+        include: {
+          responsavel: { select: { name: true } },
+          itens: { include: { produto: true }, orderBy: { createdAt: "asc" } },
+        },
+        orderBy: { tipo: "asc" },
+      },
     },
   });
   if (!p) notFound();
@@ -105,7 +119,7 @@ export default async function DetalheProposta({
     p.numeroContratoTecnico != null &&
     (p.stage === "EM_TRATATIVA" || p.stage === "AJUSTES");
   const tiposFaltantes = ESP_TIPO_ORDEM.filter((t) => !p.esps.some((e) => e.tipo === t));
-  const [equipe, equipePropostas] = await Promise.all([
+  const [equipe, equipePropostas, produtosAtivos] = await Promise.all([
     podeDelegar
       ? prisma.user.findMany({
           where: { area: filaDona, ativo: true },
@@ -118,6 +132,12 @@ export default async function DetalheProposta({
           where: { area: "PROPOSTAS", ativo: true },
           select: { id: true, name: true },
           orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
+    p.tipo === "PROPOSTA_TECNICA"
+      ? prisma.produtoServico.findMany({
+          where: { ativo: true },
+          orderBy: { nome: "asc" },
         })
       : Promise.resolve([]),
   ]);
@@ -389,65 +409,208 @@ export default async function DetalheProposta({
               {p.esps.map((e) => {
                 const podeMarcarPronta =
                   podeGerirEsp || (sessao.area === "PROPOSTAS" && sessao.id === e.responsavelId);
+                const podeEditarEstaEsp = !e.pronta && podeMarcarPronta;
+                const valorTotalEsp = e.itens.reduce(
+                  (s, i) =>
+                    s + Number(i.quantidadeMensal) * Number(i.valorUnitario) * i.periodoContratualMeses,
+                  0,
+                );
                 return (
-                  <li
-                    key={e.id}
-                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-sm font-medium">{e.numero}</span>
-                        <Pill label={ESP_TIPO_LABELS[e.tipo]} tone="neutral" />
-                        <Pill
-                          label={e.pronta ? "Pronta" : "Em elaboração"}
-                          tone={e.pronta ? "success" : "warn"}
-                        />
+                  <li key={e.id} className="px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-sm font-medium">{e.numero}</span>
+                          <Pill label={ESP_TIPO_LABELS[e.tipo]} tone="neutral" />
+                          <Pill
+                            label={e.pronta ? "Pronta" : "Em elaboração"}
+                            tone={e.pronta ? "success" : "warn"}
+                          />
+                        </div>
+                        <p className="mt-1 text-xs text-muted">
+                          {e.responsavel ? (
+                            <>responsável: {e.responsavel.name}</>
+                          ) : (
+                            <span className="font-medium text-warn">sem responsável</span>
+                          )}
+                        </p>
                       </div>
-                      <p className="mt-1 text-xs text-muted">
-                        {e.responsavel ? (
-                          <>responsável: {e.responsavel.name}</>
-                        ) : (
-                          <span className="font-medium text-warn">sem responsável</span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {podeGerirEsp && (
+                          <form action={designarEsp} className="flex items-center gap-1.5">
+                            <input type="hidden" name="id" value={e.id} />
+                            <input type="hidden" name="opportunityId" value={p.id} />
+                            <select
+                              key={e.responsavelId ?? "nenhum"}
+                              name="userId"
+                              defaultValue={e.responsavelId ?? ""}
+                              aria-label={`Delegar ${e.numero} para`}
+                              className="h-8 max-w-40 rounded-md border border-line bg-canvas px-2 text-xs outline-none focus:border-brand"
+                            >
+                              <option value="">— sem responsável</option>
+                              {equipePropostas.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="submit"
+                              className="h-8 rounded-md border border-line px-3 text-xs font-medium text-muted transition-colors duration-150 hover:text-ink"
+                            >
+                              Delegar
+                            </button>
+                          </form>
                         )}
-                      </p>
+                        {podeMarcarPronta && (
+                          <form action={alternarEspPronta}>
+                            <input type="hidden" name="id" value={e.id} />
+                            <input type="hidden" name="opportunityId" value={p.id} />
+                            <input type="hidden" name="pronta" value={e.pronta ? "0" : "1"} />
+                            <button
+                              type="submit"
+                              className="h-8 rounded-md border border-line px-3 text-xs font-medium text-muted transition-colors duration-150 hover:text-ink"
+                            >
+                              {e.pronta ? "Reabrir" : "Marcar pronta"}
+                            </button>
+                          </form>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {podeGerirEsp && (
-                        <form action={designarEsp} className="flex items-center gap-1.5">
-                          <input type="hidden" name="id" value={e.id} />
-                          <input type="hidden" name="opportunityId" value={p.id} />
-                          <select
-                            key={e.responsavelId ?? "nenhum"}
-                            name="userId"
-                            defaultValue={e.responsavelId ?? ""}
-                            aria-label={`Delegar ${e.numero} para`}
-                            className="h-8 max-w-40 rounded-md border border-line bg-canvas px-2 text-xs outline-none focus:border-brand"
+
+                    {e.itens.length > 0 && (
+                      <ul className="mt-3 space-y-1.5 border-t border-line-soft pt-3">
+                        {e.itens.map((item) => (
+                          <li
+                            key={item.id}
+                            className="flex flex-wrap items-center justify-between gap-2 text-xs"
                           >
-                            <option value="">— sem responsável</option>
-                            {equipePropostas.map((u) => (
-                              <option key={u.id} value={u.id}>
-                                {u.name}
+                            <span className="text-ink">
+                              {item.produto.nome}{" "}
+                              <span className="text-muted">
+                                · {Number(item.quantidadeMensal)} {item.produto.unidade}/mês ×{" "}
+                                {item.periodoContratualMeses} meses × {brlUnitario.format(Number(item.valorUnitario))}
+                              </span>
+                            </span>
+                            <span className="flex shrink-0 items-center gap-2">
+                              <span className="font-medium tabular-nums">
+                                {brl.format(
+                                  Number(item.quantidadeMensal) *
+                                    Number(item.valorUnitario) *
+                                    item.periodoContratualMeses,
+                                )}
+                              </span>
+                              {podeEditarEstaEsp && (
+                                <form action={removerEspItem}>
+                                  <input type="hidden" name="id" value={item.id} />
+                                  <input type="hidden" name="espId" value={e.id} />
+                                  <input type="hidden" name="opportunityId" value={p.id} />
+                                  <button
+                                    type="submit"
+                                    aria-label={`Remover ${item.produto.nome}`}
+                                    className="text-faint transition-colors duration-150 hover:text-danger"
+                                  >
+                                    ×
+                                  </button>
+                                </form>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                        <li className="flex justify-end pt-1 text-xs font-medium">
+                          total: {brl.format(valorTotalEsp)}
+                        </li>
+                      </ul>
+                    )}
+
+                    {podeEditarEstaEsp && produtosAtivos.length > 0 && (
+                      <form
+                        action={adicionarEspItem}
+                        className="mt-3 flex flex-wrap items-end gap-2 border-t border-line-soft pt-3"
+                      >
+                        <input type="hidden" name="espId" value={e.id} />
+                        <input type="hidden" name="opportunityId" value={p.id} />
+                        <label className="min-w-36 flex-1 text-xs font-medium text-muted">
+                          Produto/serviço
+                          <select
+                            name="produtoId"
+                            required
+                            defaultValue=""
+                            className={`${campoTexto} mt-1`}
+                          >
+                            <option value="" disabled>
+                              Selecione
+                            </option>
+                            {produtosAtivos.map((prod) => (
+                              <option key={prod.id} value={prod.id}>
+                                {prod.nome} ({prod.unidade})
                               </option>
                             ))}
                           </select>
-                          <button
-                            type="submit"
-                            className="h-8 rounded-md border border-line px-3 text-xs font-medium text-muted transition-colors duration-150 hover:text-ink"
-                          >
-                            Delegar
-                          </button>
-                        </form>
+                        </label>
+                        <label className="w-24 text-xs font-medium text-muted">
+                          Qtd/mês
+                          <input
+                            type="number"
+                            name="quantidadeMensal"
+                            step="0.01"
+                            min="0.01"
+                            required
+                            className={`${campoTexto} mt-1`}
+                          />
+                        </label>
+                        <label className="w-24 text-xs font-medium text-muted">
+                          Meses
+                          <input
+                            type="number"
+                            name="periodoContratualMeses"
+                            step="1"
+                            min="1"
+                            required
+                            className={`${campoTexto} mt-1`}
+                          />
+                        </label>
+                        <label className="w-32 text-xs font-medium text-muted">
+                          Valor unit.
+                          <CampoValorDecimal name="valorUnitario" placeholder="preço padrão" />
+                        </label>
+                        <button type="submit" className={btnAdicionar}>
+                          Adicionar item
+                        </button>
+                      </form>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line-soft pt-3 text-xs">
+                      <span className="font-medium text-muted">Relatório técnico:</span>
+                      {e.relatorioUrl ? (
+                        <a
+                          href={e.relatorioUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-brand hover:underline"
+                        >
+                          {e.relatorioNome} ({tamanhoArquivo(e.relatorioTamanho ?? 0)})
+                        </a>
+                      ) : (
+                        <span className="text-faint">nenhum anexado</span>
                       )}
-                      {podeMarcarPronta && (
-                        <form action={alternarEspPronta}>
-                          <input type="hidden" name="id" value={e.id} />
+                      {podeEditarEstaEsp && (
+                        <form
+                          action={anexarRelatorioEsp}
+                          className="flex items-center gap-2"
+                        >
+                          <input type="hidden" name="espId" value={e.id} />
                           <input type="hidden" name="opportunityId" value={p.id} />
-                          <input type="hidden" name="pronta" value={e.pronta ? "0" : "1"} />
-                          <button
-                            type="submit"
-                            className="h-8 rounded-md border border-line px-3 text-xs font-medium text-muted transition-colors duration-150 hover:text-ink"
-                          >
-                            {e.pronta ? "Reabrir" : "Marcar pronta"}
+                          <input
+                            type="file"
+                            name="file"
+                            required
+                            accept=".pdf,.doc,.docx"
+                            aria-label={`Anexar relatório técnico de ${e.numero}`}
+                            className="text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-surface file:px-2.5 file:py-1 file:text-xs file:font-medium file:text-ink file:transition-colors file:duration-150 hover:file:bg-surface-2"
+                          />
+                          <button type="submit" className={btnAdicionar}>
+                            {e.relatorioUrl ? "Substituir" : "Anexar"}
                           </button>
                         </form>
                       )}

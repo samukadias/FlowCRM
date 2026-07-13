@@ -11,6 +11,15 @@ export const brlCompacto = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 1,
 });
 
+/** Com centavos — para preço unitário (ex.: R$ 4,80/GB), onde arredondar
+ * para inteiro perderia precisão relevante. */
+export const brlUnitario = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 export const dataCurta = new Intl.DateTimeFormat("pt-BR", {
   day: "2-digit",
   month: "short",

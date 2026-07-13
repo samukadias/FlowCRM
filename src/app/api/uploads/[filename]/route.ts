@@ -22,14 +22,24 @@ export async function GET(
     return new NextResponse("Nome de arquivo inválido.", { status: 400 });
   }
 
-  const evento = await prisma.workflowEvent.findFirst({
-    where: {
-      fileUrl: `/api/uploads/${filename}`,
-      opportunity: filtroPropostasVisiveis(sessao),
-    },
-    select: { fileName: true },
-  });
-  if (!evento) return new NextResponse("Arquivo não encontrado.", { status: 404 });
+  const [evento, espDoc] = await Promise.all([
+    prisma.workflowEvent.findFirst({
+      where: {
+        fileUrl: `/api/uploads/${filename}`,
+        opportunity: filtroPropostasVisiveis(sessao),
+      },
+      select: { fileName: true },
+    }),
+    prisma.esp.findFirst({
+      where: {
+        relatorioUrl: `/api/uploads/${filename}`,
+        opportunity: filtroPropostasVisiveis(sessao),
+      },
+      select: { relatorioNome: true },
+    }),
+  ]);
+  const nomeArquivo = evento?.fileName ?? espDoc?.relatorioNome;
+  if (!nomeArquivo) return new NextResponse("Arquivo não encontrado.", { status: 404 });
 
   const extensao = path.extname(filename).slice(1).toLowerCase();
   const contentType = MIME_POR_EXTENSAO[extensao] ?? "application/octet-stream";
@@ -39,7 +49,7 @@ export async function GET(
     return new NextResponse(new Uint8Array(bytes), {
       headers: {
         "Content-Type": contentType,
-        "Content-Disposition": `inline; filename="${encodeURIComponent(evento.fileName ?? filename)}"`,
+        "Content-Disposition": `inline; filename="${encodeURIComponent(nomeArquivo)}"`,
         "Cache-Control": "private, max-age=3600",
       },
     });
