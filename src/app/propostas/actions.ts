@@ -4,8 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
-import type { MotivoPerda, Stage } from "@/generated/prisma/enums";
-import { FILA_DONA, FILA_TITULOS, MOTIVO_PERDA_LABELS, TRANSITIONS } from "@/lib/flow";
+import type { MotivoPerda, Stage, TipoProposta } from "@/generated/prisma/enums";
+import {
+  FILA_DONA,
+  FILA_TITULOS,
+  MOTIVO_PERDA_LABELS,
+  STAGE_META,
+  TIPO_PROPOSTA_LABELS,
+  TRANSITIONS,
+} from "@/lib/flow";
 import { ehGestor, obterSessao, podeAgir, podeAtuar } from "@/lib/auth";
 import { notificarArea, notificarUsuario } from "@/lib/notificar";
 import { filtroPropostasVisiveis } from "@/lib/visibilidade";
@@ -35,11 +42,19 @@ async function proximoCodigo(prefixo: "OPP" | "CTR"): Promise<string> {
   return `${inicio}${String(atual + 1).padStart(4, "0")}`;
 }
 
+/** PD + 2 dígitos do ano + sequência do código da proposta.
+ * Ex.: OPP-2026-0013 → PD260013. */
+function numeroContratoTecnicoDe(codigo: string): string {
+  const [, ano, sequencia] = codigo.split("-");
+  return `PD${ano.slice(-2)}${sequencia}`;
+}
+
 export async function criarProposta(formData: FormData) {
   const clienteId = String(formData.get("clienteId") ?? "");
   const titulo = String(formData.get("titulo") ?? "").trim();
   const descricao = String(formData.get("descricao") ?? "").trim();
   const valorBruto = String(formData.get("valor") ?? "").trim();
+  const tipo = String(formData.get("tipo") ?? "") as TipoProposta;
   if (!clienteId || !titulo) return;
 
   const valor = valorBruto ? Number(valorBruto.replace(/\./g, "").replace(",", ".")) : null;
@@ -48,6 +63,8 @@ export async function criarProposta(formData: FormData) {
   const sessao = await obterSessao();
   if (!podeAgir(sessao, "COMERCIAL")) return;
   const autor = sessao;
+
+  if (!(tipo in TIPO_PROPOSTA_LABELS)) redirect("/propostas/nova?erro=tipo_obrigatorio");
 
   // O cliente precisa existir no cadastro (mantido pelo admin/gestor de Propostas)
   const cliente = await prisma.cliente.findUnique({ where: { id: clienteId } });
@@ -60,6 +77,7 @@ export async function criarProposta(formData: FormData) {
       titulo,
       descricao: descricao || null,
       valorEstimado: valor != null && Number.isFinite(valor) ? valor : null,
+      tipo,
       stage: "ENTRADA",
       criadoPorId: autor.id,
       eventos: {
@@ -81,6 +99,42 @@ export async function criarProposta(formData: FormData) {
 
   revalidatePath("/");
   redirect(`/propostas/${proposta.id}`);
+}
+
+/** Enquanto a proposta não estiver encerrada (Aceita/Recusada/Cancelada), quem
+ * a registrou ou o gestor Comercial pode ajustar título, valor e descrição.
+ * Cliente e tipo não mudam depois de criados. */
+export async function atualizarPropostaComercial(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  const descricao = String(formData.get("descricao") ?? "").trim();
+  const valorBruto = String(formData.get("valor") ?? "").trim();
+  if (!id || !titulo) return;
+
+  const sessao = await obterSessao();
+  if (!sessao) return;
+
+  const proposta = await prisma.opportunity.findUnique({ where: { id } });
+  if (!proposta || STAGE_META[proposta.stage].terminal) return;
+
+  const pode =
+    ehGestor(sessao, "COMERCIAL") ||
+    (sessao.area === "COMERCIAL" && sessao.id === proposta.criadoPorId);
+  if (!pode) return;
+
+  const valor = valorBruto ? Number(valorBruto.replace(/\./g, "").replace(",", ".")) : null;
+
+  await prisma.opportunity.update({
+    where: { id },
+    data: {
+      titulo,
+      descricao: descricao || null,
+      valorEstimado: valor != null && Number.isFinite(valor) ? valor : null,
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath(`/propostas/${id}`);
 }
 
 type PropostaComCliente = Prisma.OpportunityGetPayload<{
@@ -107,6 +161,13 @@ async function executarMovimentacao(
         stage: para,
         ...(mudouDeMaos ? { responsavelId: null } : {}),
         ...(opcoes.motivoPerda ? { motivoPerda: opcoes.motivoPerda } : {}),
+        // Proposta Técnica ganha o número de contrato assim que entra em
+        // tratativa com a Propostas — atribuído uma única vez, nunca reescrito.
+        ...(para === "EM_TRATATIVA" &&
+        proposta.tipo === "PROPOSTA_TECNICA" &&
+        !proposta.numeroContratoTecnico
+          ? { numeroContratoTecnico: numeroContratoTecnicoDe(proposta.codigo) }
+          : {}),
         // Toda mudança de etapa reinicia a contagem de estagnação
         alertaEstagnacaoEm: null,
       },

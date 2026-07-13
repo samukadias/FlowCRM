@@ -130,6 +130,12 @@ enum Stage {
   CANCELADA
 }
 
+// Classificação obrigatória ao registrar a proposta.
+enum TipoProposta {
+  ORCAMENTO_ORIENTATIVO // OO
+  PROPOSTA_TECNICA // RPT, PO e ESP
+}
+
 // Coletado ao mover a proposta para RECUSADA ou CANCELADA — alimenta o
 // relatório de motivos de perda.
 enum MotivoPerda {
@@ -151,6 +157,9 @@ model Opportunity {
   titulo        String
   descricao     String?
   valorEstimado Decimal? @db.Decimal(14, 2)
+  // Nullable só para não invalidar propostas registradas antes deste campo
+  // existir — obrigatório no formulário de nova proposta.
+  tipo          TipoProposta?
   stage         Stage    @default(ENTRADA)
   criadoPorId   String
   criadoPor     User     @relation("CriadoPor", fields: [criadoPorId], references: [id])
@@ -163,6 +172,10 @@ model Opportunity {
   // Marca quando o alerta de estagnação foi disparado nesta etapa —
   // evita notificar de novo a cada checagem. Zera a cada mudança de etapa.
   alertaEstagnacaoEm DateTime?
+  // Atribuído automaticamente (nunca editado à mão) quando uma proposta do
+  // tipo Proposta Técnica entra em tratativa com a Propostas. Formato
+  // PD + 2 dígitos do ano + sequência do código — ex.: OPP-2026-0013 → PD260013.
+  numeroContratoTecnico String? @unique
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

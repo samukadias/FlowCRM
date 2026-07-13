@@ -5,6 +5,7 @@ import type {
   HealthStatus,
   Perfil,
   MotivoPerda,
+  TipoProposta,
 } from "@/generated/prisma/enums";
 
 export type Tone = "progress" | "success" | "warn" | "danger" | "neutral";
@@ -215,6 +216,11 @@ export const PERFIL_LABELS: Record<Perfil, string> = {
 
 /** Etapas cujo motivo de perda é coletado ao mover a proposta para lá. */
 export const ETAPAS_COM_MOTIVO: Stage[] = ["RECUSADA", "CANCELADA"];
+
+export const TIPO_PROPOSTA_LABELS: Record<TipoProposta, string> = {
+  ORCAMENTO_ORIENTATIVO: "Orçamento Orientativo (OO)",
+  PROPOSTA_TECNICA: "Proposta Técnica (RPT, PO e ESP)",
+};
 
 export const MOTIVO_PERDA_LABELS: Record<MotivoPerda, string> = {
   PRECO: "Preço/orçamento",

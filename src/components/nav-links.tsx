@@ -21,20 +21,19 @@ type Item = {
   contador?: number;
 };
 
-const itens: Item[] = [
-  {
-    href: "/",
-    label: "Propostas",
-    icone: FileText,
-    ativo: (p) => p === "/" || p.startsWith("/propostas"),
-  },
-  {
-    href: "/filas",
-    label: "Filas",
-    icone: ListTodo,
-    ativo: (p) => p.startsWith("/filas"),
-  },
-];
+const propostasItem: Item = {
+  href: "/",
+  label: "Propostas",
+  icone: FileText,
+  ativo: (p) => p === "/" || p.startsWith("/propostas"),
+};
+
+const filasItem: Item = {
+  href: "/filas",
+  label: "Filas",
+  icone: ListTodo,
+  ativo: (p) => p.startsWith("/filas"),
+};
 
 const relatorios: Item = {
   href: "/relatorios",
@@ -84,7 +83,8 @@ export function NavLinks({
 }) {
   const pathname = usePathname();
   const visiveis = [
-    ...itens,
+    ...(gestor ? [propostasItem] : []),
+    filasItem,
     { ...tarefasItem, contador: tarefasPendentes },
     ...(gestor ? [relatorios] : []),
     ...(clientes ? [clientesItem] : []),

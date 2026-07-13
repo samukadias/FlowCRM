@@ -31,9 +31,11 @@ export default async function BuscaPropostas({
   const etapaValida = etapa && etapa in STAGE_META ? (etapa as Stage) : undefined;
   const sessao = await obterSessao();
   if (!sessao) redirect("/login");
+  const analista = sessao.area !== "ADMIN" && sessao.perfil === "ANALISTA";
+  // Tela de busca/gestão do funil é visão gerencial — analista trabalha pelas Filas.
+  if (analista) redirect("/filas");
   const podeCriar = podeAgir(sessao, "COMERCIAL");
   const visiveis = filtroPropostasVisiveis(sessao);
-  const analista = sessao.area !== "ADMIN" && sessao.perfil === "ANALISTA";
   const etapasNaoTerminais = STAGE_ORDER.filter((s) => !STAGE_META[s].terminal);
 
   const filtroTexto = q?.trim()
@@ -134,9 +136,6 @@ export default async function BuscaPropostas({
             {total === 1 ? "1 proposta" : `${total} propostas`}
             {emAndamento.length > 0 && (
               <> · {brl.format(valorAndamento)} em andamento</>
-            )}
-            {analista && (
-              <span className="text-faint"> · com o seu envolvimento</span>
             )}
             {pessoaFiltrada && (
               <>
@@ -254,15 +253,10 @@ export default async function BuscaPropostas({
 
       {propostas.length === 0 ? (
         <div className="mt-16 text-center">
-          <p className="text-sm font-medium">
-            {analista && !q?.trim() && !etapaValida
-              ? "Você ainda não está envolvido em nenhuma proposta."
-              : "Nenhuma proposta encontrada."}
-          </p>
+          <p className="text-sm font-medium">Nenhuma proposta encontrada.</p>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted">
-            {analista && !q?.trim() && !etapaValida
-              ? "Quando o gestor da sua área delegar uma proposta a você (ou você participar de uma movimentação), ela aparece nesta lista."
-              : "Busque pelo código (ex.: OPP-2026-0001), pelo nome do cliente ou por uma palavra do título. Você também pode limpar os filtros de etapa."}
+            Busque pelo código (ex.: OPP-2026-0001), pelo nome do cliente ou por uma
+            palavra do título. Você também pode limpar os filtros de etapa.
           </p>
         </div>
       ) : visao === "kanban" ? (

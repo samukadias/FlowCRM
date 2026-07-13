@@ -24,8 +24,14 @@ vi.mock("next/navigation", () => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const { obterSessao } = await import("@/lib/auth");
-const { criarProposta: criarPropostaAction, moverProposta, delegarProposta, registrarNota, registrarEmail } =
-  await import("./actions");
+const {
+  criarProposta: criarPropostaAction,
+  atualizarPropostaComercial,
+  moverProposta,
+  delegarProposta,
+  registrarNota,
+  registrarEmail,
+} = await import("./actions");
 
 function logarComo(sessao: Sessao) {
   vi.mocked(obterSessao).mockResolvedValue(sessao);
@@ -65,6 +71,7 @@ describe("criarProposta", () => {
     fd.set("clienteId", cliente.id);
     fd.set("titulo", "Migração para nuvem");
     fd.set("valor", "50000");
+    fd.set("tipo", "PROPOSTA_TECNICA");
 
     await expect(criarPropostaAction(fd)).rejects.toBeInstanceOf(RedirectError);
 
@@ -93,6 +100,7 @@ describe("criarProposta", () => {
       const fd = new FormData();
       fd.set("clienteId", cliente.id);
       fd.set("titulo", titulo);
+      fd.set("tipo", "ORCAMENTO_ORIENTATIVO");
       await expect(criarPropostaAction(fd)).rejects.toBeInstanceOf(RedirectError);
     }
 
@@ -102,6 +110,125 @@ describe("criarProposta", () => {
     const [seq1, seq2] = propostas.map((p) => Number(p.codigo.split("-").pop()));
     expect(propostas[0].codigo).toMatch(new RegExp(`^OPP-${ano}-\\d{4}$`));
     expect(seq2).toBe(seq1 + 1);
+  });
+
+  it("sem tipo de proposta é barrado e não cria nada", async () => {
+    const comercial = await criarUsuario("COMERCIAL", "GESTOR");
+    const cliente = await criarCliente();
+    logarComo(sessaoDe(comercial));
+
+    const fd = new FormData();
+    fd.set("clienteId", cliente.id);
+    fd.set("titulo", "Proposta sem tipo");
+
+    await expect(criarPropostaAction(fd)).rejects.toBeInstanceOf(RedirectError);
+
+    expect(await prisma.opportunity.count()).toBe(0);
+  });
+});
+
+describe("atualizarPropostaComercial", () => {
+  it("quem registrou a proposta pode editar título, valor e descrição", async () => {
+    const comercial = await criarUsuario("COMERCIAL", "ANALISTA");
+    const cliente = await criarCliente();
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: comercial.id,
+      stage: "ENTRADA",
+    });
+    logarComo(sessaoDe(comercial));
+
+    const fd = new FormData();
+    fd.set("id", proposta.id);
+    fd.set("titulo", "Título revisado");
+    fd.set("descricao", "Descrição revisada");
+    fd.set("valor", "99000");
+    await atualizarPropostaComercial(fd);
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.titulo).toBe("Título revisado");
+    expect(atual.descricao).toBe("Descrição revisada");
+    expect(Number(atual.valorEstimado)).toBe(99_000);
+  });
+
+  it("gestor Comercial edita mesmo proposta registrada por outro analista", async () => {
+    const analista = await criarUsuario("COMERCIAL", "ANALISTA");
+    const gestor = await criarUsuario("COMERCIAL", "GESTOR");
+    const cliente = await criarCliente();
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: analista.id,
+      stage: "EM_TRATATIVA",
+    });
+    logarComo(sessaoDe(gestor));
+
+    const fd = new FormData();
+    fd.set("id", proposta.id);
+    fd.set("titulo", "Ajustado pelo gestor");
+    await atualizarPropostaComercial(fd);
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.titulo).toBe("Ajustado pelo gestor");
+  });
+
+  it("analista Comercial que não registrou a proposta não pode editar", async () => {
+    const autor = await criarUsuario("COMERCIAL", "ANALISTA");
+    const outroAnalista = await criarUsuario("COMERCIAL", "ANALISTA");
+    const cliente = await criarCliente();
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: autor.id,
+      stage: "ENTRADA",
+    });
+    logarComo(sessaoDe(outroAnalista));
+
+    const fd = new FormData();
+    fd.set("id", proposta.id);
+    fd.set("titulo", "Não deveria mudar");
+    await atualizarPropostaComercial(fd);
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.titulo).not.toBe("Não deveria mudar");
+  });
+
+  it("gestor de outra área não pode editar dados comerciais", async () => {
+    const comercial = await criarUsuario("COMERCIAL", "ANALISTA");
+    const gestorPropostas = await criarUsuario("PROPOSTAS", "GESTOR");
+    const cliente = await criarCliente();
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: comercial.id,
+      stage: "EM_TRATATIVA",
+    });
+    logarComo(sessaoDe(gestorPropostas));
+
+    const fd = new FormData();
+    fd.set("id", proposta.id);
+    fd.set("titulo", "Não deveria mudar");
+    await atualizarPropostaComercial(fd);
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.titulo).not.toBe("Não deveria mudar");
+  });
+
+  it("proposta encerrada (aceita) não pode mais ser editada, nem pelo gestor", async () => {
+    const comercial = await criarUsuario("COMERCIAL", "ANALISTA");
+    const gestor = await criarUsuario("COMERCIAL", "GESTOR");
+    const cliente = await criarCliente();
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: comercial.id,
+      stage: "ACEITA",
+    });
+    logarComo(sessaoDe(gestor));
+
+    const fd = new FormData();
+    fd.set("id", proposta.id);
+    fd.set("titulo", "Não deveria mudar");
+    await atualizarPropostaComercial(fd);
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.titulo).not.toBe("Não deveria mudar");
   });
 });
 
@@ -239,6 +366,94 @@ describe("moverProposta", () => {
       where: { userId: gestorDelivery.id },
     });
     expect(notificacoes).toHaveLength(1);
+  });
+
+  it("proposta técnica ganha número de contrato ao entrar em tratativa", async () => {
+    const { comercial, cliente } = await cenarioBase();
+    const gestorPropostas = await criarUsuario("PROPOSTAS", "GESTOR");
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: comercial.id,
+      stage: "ENTRADA",
+      tipo: "PROPOSTA_TECNICA",
+      codigo: "OPP-2026-0013",
+    });
+    logarComo(sessaoDe(gestorPropostas));
+
+    const fd = new FormData();
+    fd.set("id", proposta.id);
+    fd.set("para", "EM_TRATATIVA");
+    await moverProposta(fd);
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.numeroContratoTecnico).toBe("PD260013");
+  });
+
+  it("orçamento orientativo não ganha número de contrato", async () => {
+    const { comercial, cliente } = await cenarioBase();
+    const gestorPropostas = await criarUsuario("PROPOSTAS", "GESTOR");
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: comercial.id,
+      stage: "ENTRADA",
+      tipo: "ORCAMENTO_ORIENTATIVO",
+      codigo: "OPP-2026-0014",
+    });
+    logarComo(sessaoDe(gestorPropostas));
+
+    const fd = new FormData();
+    fd.set("id", proposta.id);
+    fd.set("para", "EM_TRATATIVA");
+    await moverProposta(fd);
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.numeroContratoTecnico).toBeNull();
+  });
+
+  it("número de contrato já atribuído não é reescrito ao ir e voltar de ajustes", async () => {
+    const { comercial, cliente } = await cenarioBase();
+    const gestorPropostas = await criarUsuario("PROPOSTAS", "GESTOR");
+    const gestorDelivery = await criarUsuario("DELIVERY", "GESTOR");
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: comercial.id,
+      stage: "ENTRADA",
+      tipo: "PROPOSTA_TECNICA",
+      codigo: "OPP-2026-0015",
+    });
+
+    logarComo(sessaoDe(gestorPropostas));
+    await moverProposta((() => {
+      const fd = new FormData();
+      fd.set("id", proposta.id);
+      fd.set("para", "EM_TRATATIVA");
+      return fd;
+    })());
+    await moverProposta((() => {
+      const fd = new FormData();
+      fd.set("id", proposta.id);
+      fd.set("para", "EM_VERIFICACAO");
+      return fd;
+    })());
+
+    logarComo(sessaoDe(gestorDelivery));
+    await moverProposta((() => {
+      const fd = new FormData();
+      fd.set("id", proposta.id);
+      fd.set("para", "AJUSTES");
+      return fd;
+    })());
+
+    logarComo(sessaoDe(gestorPropostas));
+    await moverProposta((() => {
+      const fd = new FormData();
+      fd.set("id", proposta.id);
+      fd.set("para", "EM_TRATATIVA");
+      return fd;
+    })());
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.numeroContratoTecnico).toBe("PD260015");
   });
 
   it("aceite gera o contrato automaticamente e notifica Contratos e Faturamento", async () => {

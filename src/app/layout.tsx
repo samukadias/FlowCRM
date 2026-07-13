@@ -37,6 +37,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const sessao = await obterSessao();
+  const gestor = sessao ? sessao.perfil === "GESTOR" || sessao.area === "ADMIN" : false;
   const naoLidas = sessao
     ? await prisma.notification.count({ where: { userId: sessao.id, lida: false } })
     : 0;
@@ -52,7 +53,7 @@ export default async function RootLayout({
       <body className="flex min-h-full flex-col">
         <header className="sticky top-0 z-30 border-b border-line bg-card/95 backdrop-blur-sm">
           <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-4 px-6 sm:gap-6">
-            <Link href="/" className="flex shrink-0 items-center gap-2.5">
+            <Link href={!sessao || gestor ? "/" : "/filas"} className="flex shrink-0 items-center gap-2.5">
               <span
                 aria-hidden
                 className="flex size-7 items-center justify-center rounded-lg bg-brand-strong font-mono text-[13px] font-bold text-white"
@@ -67,7 +68,7 @@ export default async function RootLayout({
               <>
                 <NavLinks
                   admin={sessao.area === "ADMIN"}
-                  gestor={sessao.perfil === "GESTOR" || sessao.area === "ADMIN"}
+                  gestor={gestor}
                   clientes={
                     sessao.area === "ADMIN" ||
                     (sessao.area === "PROPOSTAS" && sessao.perfil === "GESTOR")

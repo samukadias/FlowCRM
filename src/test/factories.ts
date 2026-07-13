@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { Area, Perfil, Stage } from "@/generated/prisma/enums";
+import type { Area, Perfil, Stage, TipoProposta } from "@/generated/prisma/enums";
 
 let contador = 0;
 /** Sufixo curto e único por chamada, para não colidir campos @unique entre testes. */
@@ -38,14 +38,17 @@ export async function criarProposta(params: {
   stage?: Stage;
   responsavelId?: string | null;
   valorEstimado?: number;
+  tipo?: TipoProposta;
+  codigo?: string;
 }) {
   const stage = params.stage ?? "ENTRADA";
   return prisma.opportunity.create({
     data: {
-      codigo: `OPP-TESTE-${sufixo()}`,
+      codigo: params.codigo ?? `OPP-TESTE-${sufixo()}`,
       clienteId: params.clienteId,
       titulo: "Proposta de teste",
       valorEstimado: params.valorEstimado ?? 120_000,
+      tipo: params.tipo ?? null,
       stage,
       criadoPorId: params.criadoPorId,
       responsavelId: params.responsavelId ?? null,

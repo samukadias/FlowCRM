@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Check, ListTodo, Mail, Paperclip, StickyNote } from "lucide-react";
+import { Check, ListTodo, Mail, Paperclip, Pencil, StickyNote } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import {
   ATESTACAO_META,
@@ -8,11 +8,13 @@ import {
   HEALTH_META,
   MOTIVO_PERDA_LABELS,
   STAGE_META,
+  TIPO_PROPOSTA_LABELS,
   TONE_COLOR,
   TRANSITIONS,
 } from "@/lib/flow";
 import {
   anexarArquivo,
+  atualizarPropostaComercial,
   delegarProposta,
   moverProposta,
   registrarEmail,
@@ -23,6 +25,7 @@ import { brl, dataCurta, tempoRelativo } from "@/lib/format";
 import { FlowTrack } from "@/components/flow-track";
 import { StageBadge } from "@/components/stage-badge";
 import { Pill } from "@/components/pill";
+import { CampoValor } from "@/components/campo-valor";
 import { ProposalTimeline, type TimelineItem } from "@/components/proposal-timeline";
 import { ehGestor, obterSessao, podeAtuar } from "@/lib/auth";
 import { filtroPropostasVisiveis } from "@/lib/visibilidade";
@@ -77,6 +80,12 @@ export default async function DetalheProposta({
   // Gestor da área dona da fila atual pode delegar daqui mesmo
   const filaDona = FILA_DONA[p.stage];
   const podeDelegar = filaDona != null && ehGestor(sessao, filaDona);
+  // Quem registrou a proposta, ou o gestor Comercial, ajusta os dados
+  // comerciais enquanto ela não estiver encerrada.
+  const podeEditarComercial =
+    !meta.terminal &&
+    (ehGestor(sessao, "COMERCIAL") ||
+      (sessao.area === "COMERCIAL" && sessao.id === p.criadoPorId));
   const equipe = podeDelegar
     ? await prisma.user.findMany({
       where: { area: filaDona, ativo: true },
@@ -147,9 +156,17 @@ export default async function DetalheProposta({
 
       <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="font-mono text-xs text-faint">{p.codigo}</span>
             <StageBadge stage={p.stage} />
+            {p.numeroContratoTecnico && (
+              <span
+                className="font-mono text-xs font-medium text-brand"
+                title="Número de contrato — atribuído automaticamente, não editável"
+              >
+                {p.numeroContratoTecnico}
+              </span>
+            )}
           </div>
           <h1 className="mt-1.5 text-2xl font-semibold tracking-tight text-balance">
             {p.titulo}
@@ -157,6 +174,7 @@ export default async function DetalheProposta({
           <p className="mt-1 text-sm text-muted">
             {p.cliente.nome} · registrada em {dataCurta.format(p.createdAt)} por{" "}
             {p.criadoPor.name}
+            {p.tipo && <> · {TIPO_PROPOSTA_LABELS[p.tipo]}</>}
           </p>
         </div>
         <div className="text-right max-sm:text-left">
@@ -278,6 +296,52 @@ export default async function DetalheProposta({
           )}
         </div>
       </section>
+
+      {podeEditarComercial && (
+        <details className="card mt-6">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 px-5 py-4 text-sm font-medium text-ink marker:hidden">
+            <Pencil size={14} strokeWidth={1.75} aria-hidden />
+            Editar dados comerciais
+          </summary>
+          <form
+            action={atualizarPropostaComercial}
+            className="space-y-4 border-t border-line px-5 py-5"
+          >
+            <input type="hidden" name="id" value={p.id} />
+            <label className="block text-sm font-medium">
+              Título
+              <input
+                name="titulo"
+                required
+                defaultValue={p.titulo}
+                className={`${campoTexto} mt-1.5`}
+              />
+            </label>
+            <label className="block text-sm font-medium">
+              Valor estimado
+              <CampoValor
+                name="valor"
+                defaultValue={p.valorEstimado != null ? Number(p.valorEstimado) : null}
+              />
+            </label>
+            <label className="block text-sm font-medium">
+              Descrição
+              <textarea
+                name="descricao"
+                rows={3}
+                defaultValue={p.descricao ?? ""}
+                className={`${campoTexto} mt-1.5`}
+              />
+            </label>
+            <button
+              type="submit"
+              className="h-9 rounded-lg bg-brand-strong px-4 text-sm font-medium text-white shadow-sm transition-colors duration-150 hover:bg-brand"
+            >
+              Salvar alterações
+            </button>
+          </form>
+        </details>
+      )}
 
       <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section>

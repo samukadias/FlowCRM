@@ -3,17 +3,31 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { criarProposta } from "@/app/propostas/actions";
 import { obterSessao, podeAgir } from "@/lib/auth";
+import { CampoValor } from "@/components/campo-valor";
+import { TIPO_PROPOSTA_LABELS } from "@/lib/flow";
+import type { TipoProposta } from "@/generated/prisma/enums";
 
 export const metadata = { title: "Nova proposta — PropostaFlow" };
 
 const campo =
   "mt-1.5 w-full rounded-lg border border-line bg-canvas px-3 text-sm outline-none placeholder:text-muted focus:border-brand focus:ring-2 focus:ring-brand/25";
 
-export default async function NovaProposta() {
+const MENSAGENS_ERRO: Record<string, string> = {
+  tipo_obrigatorio: "Selecione o tipo de proposta antes de registrar.",
+};
+
+export default async function NovaProposta({
+  searchParams,
+}: {
+  searchParams: Promise<{ erro?: string }>;
+}) {
   // Registrar entrada é um verbo do Comercial (ou ADMIN)
   if (!podeAgir(await obterSessao(), "COMERCIAL")) redirect("/");
 
-  const clientes = await prisma.cliente.findMany({ orderBy: { nome: "asc" } });
+  const [clientes, { erro }] = await Promise.all([
+    prisma.cliente.findMany({ orderBy: { nome: "asc" } }),
+    searchParams,
+  ]);
 
   return (
     <div className="mx-auto max-w-lg">
@@ -29,6 +43,15 @@ export default async function NovaProposta() {
         Registre a oportunidade recebida pelo Comercial. Ela entra no fluxo na
         etapa <strong className="font-medium text-ink">Entrada</strong>.
       </p>
+
+      {erro && MENSAGENS_ERRO[erro] && (
+        <p
+          role="alert"
+          className="mt-5 rounded-lg bg-danger-soft px-3 py-2.5 text-sm font-medium text-danger"
+        >
+          {MENSAGENS_ERRO[erro]}
+        </p>
+      )}
 
       <form action={criarProposta} className="mt-8 space-y-5">
         <label className="block text-sm font-medium">
@@ -62,13 +85,21 @@ export default async function NovaProposta() {
           />
         </label>
         <label className="block text-sm font-medium">
-          Valor estimado (R$)
-          <input
-            name="valor"
-            inputMode="decimal"
-            placeholder="Ex.: 850000"
-            className={`${campo} h-10`}
-          />
+          Tipo de proposta
+          <select name="tipo" required defaultValue="" className={`${campo} h-10`}>
+            <option value="" disabled>
+              Selecione o tipo
+            </option>
+            {(Object.keys(TIPO_PROPOSTA_LABELS) as TipoProposta[]).map((t) => (
+              <option key={t} value={t}>
+                {TIPO_PROPOSTA_LABELS[t]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-sm font-medium">
+          Valor estimado
+          <CampoValor name="valor" placeholder="Ex.: 850.000" />
         </label>
         <label className="block text-sm font-medium">
           Descrição
