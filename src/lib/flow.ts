@@ -6,6 +6,7 @@ import type {
   Perfil,
   MotivoPerda,
   TipoProposta,
+  EspTipo,
 } from "@/generated/prisma/enums";
 
 export type Tone = "progress" | "success" | "warn" | "danger" | "neutral";
@@ -220,6 +221,15 @@ export const ETAPAS_COM_MOTIVO: Stage[] = ["RECUSADA", "CANCELADA"];
 export const TIPO_PROPOSTA_LABELS: Record<TipoProposta, string> = {
   ORCAMENTO_ORIENTATIVO: "Orçamento Orientativo (OO)",
   PROPOSTA_TECNICA: "Proposta Técnica (RPT, PO e ESP)",
+};
+
+/** Ordem fixa de exibição dos tipos de ESP. */
+export const ESP_TIPO_ORDEM: EspTipo[] = ["ITOI", "ITOD", "APP"];
+
+export const ESP_TIPO_LABELS: Record<EspTipo, string> = {
+  ITOI: "ITOI",
+  ITOD: "ITOD",
+  APP: "APP",
 };
 
 export const MOTIVO_PERDA_LABELS: Record<MotivoPerda, string> = {

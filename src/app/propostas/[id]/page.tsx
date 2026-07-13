@@ -4,6 +4,8 @@ import { Check, ListTodo, Mail, Paperclip, Pencil, StickyNote } from "lucide-rea
 import { prisma } from "@/lib/prisma";
 import {
   ATESTACAO_META,
+  ESP_TIPO_LABELS,
+  ESP_TIPO_ORDEM,
   FILA_DONA,
   HEALTH_META,
   MOTIVO_PERDA_LABELS,
@@ -20,6 +22,8 @@ import {
   registrarEmail,
   registrarNota,
 } from "@/app/propostas/actions";
+import { criarEsp, designarEsp, alternarEspPronta } from "@/app/propostas/esp-actions";
+import { espsPendentes } from "@/lib/esp";
 import { criarTarefa, concluirTarefa } from "@/app/tarefas/actions";
 import { brl, dataCurta, tempoRelativo } from "@/lib/format";
 import { FlowTrack } from "@/components/flow-track";
@@ -42,6 +46,7 @@ const MENSAGENS_ERRO: Record<string, string> = {
     "Não foi possível anexar o arquivo. Confira o formato (PDF, Office, imagem, CSV, TXT ou ZIP) e o tamanho (até 15 MB).",
   anexo_falhou: "Não foi possível salvar o anexo. Tente novamente.",
   motivo_obrigatorio: "Selecione o motivo antes de registrar a recusa ou o cancelamento.",
+  esps_pendentes: "Todas as ESPs precisam estar prontas antes de enviar para verificação.",
 };
 
 export default async function DetalheProposta({
@@ -65,6 +70,7 @@ export default async function DetalheProposta({
       responsavel: { select: { name: true } },
       eventos: { orderBy: { createdAt: "desc" }, include: { user: true } },
       contrato: { include: { atestacoes: { orderBy: { competencia: "asc" } } } },
+      esps: { include: { responsavel: { select: { name: true } } }, orderBy: { tipo: "asc" } },
     },
   });
   if (!p) notFound();
@@ -74,9 +80,15 @@ export default async function DetalheProposta({
   // e-mail registrado não deve resetar o tempo na etapa atual.
   const desde =
     p.eventos.find((e) => e.eventType === "STAGE_CHANGE")?.createdAt ?? p.updatedAt;
-  const acoes = (TRANSITIONS[p.stage] ?? []).filter((t) =>
+  // Proposta Técnica só segue para verificação com todas as ESPs prontas —
+  // a equipe de Propostas trabalha na ESP, não na oportunidade diretamente.
+  const bloqueadaPorEsp = await espsPendentes(p.id, p.tipo);
+  const acoesPermitidas = (TRANSITIONS[p.stage] ?? []).filter((t) =>
     podeAtuar(sessao, t.area, p.responsavelId),
   );
+  const acoes = acoesPermitidas.filter((t) => !(t.para === "EM_VERIFICACAO" && bloqueadaPorEsp));
+  const avisoEspsPendentes =
+    bloqueadaPorEsp && acoesPermitidas.some((t) => t.para === "EM_VERIFICACAO");
   // Gestor da área dona da fila atual pode delegar daqui mesmo
   const filaDona = FILA_DONA[p.stage];
   const podeDelegar = filaDona != null && ehGestor(sessao, filaDona);
@@ -86,13 +98,29 @@ export default async function DetalheProposta({
     !meta.terminal &&
     (ehGestor(sessao, "COMERCIAL") ||
       (sessao.area === "COMERCIAL" && sessao.id === p.criadoPorId));
-  const equipe = podeDelegar
-    ? await prisma.user.findMany({
-      where: { area: filaDona, ativo: true },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    })
-    : [];
+  // Gestor de Propostas desmembra o contrato PD em ESPs e delega cada uma.
+  const podeGerirEsp = ehGestor(sessao, "PROPOSTAS");
+  const podeCriarEsp =
+    podeGerirEsp &&
+    p.numeroContratoTecnico != null &&
+    (p.stage === "EM_TRATATIVA" || p.stage === "AJUSTES");
+  const tiposFaltantes = ESP_TIPO_ORDEM.filter((t) => !p.esps.some((e) => e.tipo === t));
+  const [equipe, equipePropostas] = await Promise.all([
+    podeDelegar
+      ? prisma.user.findMany({
+          where: { area: filaDona, ativo: true },
+          select: { id: true, name: true },
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
+    podeGerirEsp
+      ? prisma.user.findMany({
+          where: { area: "PROPOSTAS", ativo: true },
+          select: { id: true, name: true },
+          orderBy: { name: "asc" },
+        })
+      : Promise.resolve([]),
+  ]);
 
   const [tarefas, todosUsuarios] = await Promise.all([
     prisma.tarefa.findMany({
@@ -267,6 +295,11 @@ export default async function DetalheProposta({
               )}
             </form>
           )}
+          {avisoEspsPendentes && (
+            <p className="mt-3 text-xs font-medium text-warn">
+              Todas as ESPs precisam estar prontas antes de enviar para verificação.
+            </p>
+          )}
           {podeDelegar && (
             <form action={delegarProposta} className="mt-3 flex items-center gap-2">
               <input type="hidden" name="id" value={p.id} />
@@ -341,6 +374,110 @@ export default async function DetalheProposta({
             </button>
           </form>
         </details>
+      )}
+
+      {p.tipo === "PROPOSTA_TECNICA" && p.numeroContratoTecnico && (
+        <section className="card mt-6 p-5">
+          <h2 className="text-sm font-semibold">ESPs do contrato {p.numeroContratoTecnico}</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Especificação dos Serviços — a proposta só segue para verificação quando
+            todas estiverem prontas.
+          </p>
+
+          {p.esps.length > 0 && (
+            <ul className="card mt-4 divide-y divide-line-soft overflow-hidden">
+              {p.esps.map((e) => {
+                const podeMarcarPronta =
+                  podeGerirEsp || (sessao.area === "PROPOSTAS" && sessao.id === e.responsavelId);
+                return (
+                  <li
+                    key={e.id}
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-sm font-medium">{e.numero}</span>
+                        <Pill label={ESP_TIPO_LABELS[e.tipo]} tone="neutral" />
+                        <Pill
+                          label={e.pronta ? "Pronta" : "Em elaboração"}
+                          tone={e.pronta ? "success" : "warn"}
+                        />
+                      </div>
+                      <p className="mt-1 text-xs text-muted">
+                        {e.responsavel ? (
+                          <>responsável: {e.responsavel.name}</>
+                        ) : (
+                          <span className="font-medium text-warn">sem responsável</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {podeGerirEsp && (
+                        <form action={designarEsp} className="flex items-center gap-1.5">
+                          <input type="hidden" name="id" value={e.id} />
+                          <input type="hidden" name="opportunityId" value={p.id} />
+                          <select
+                            key={e.responsavelId ?? "nenhum"}
+                            name="userId"
+                            defaultValue={e.responsavelId ?? ""}
+                            aria-label={`Delegar ${e.numero} para`}
+                            className="h-8 max-w-40 rounded-md border border-line bg-canvas px-2 text-xs outline-none focus:border-brand"
+                          >
+                            <option value="">— sem responsável</option>
+                            {equipePropostas.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="submit"
+                            className="h-8 rounded-md border border-line px-3 text-xs font-medium text-muted transition-colors duration-150 hover:text-ink"
+                          >
+                            Delegar
+                          </button>
+                        </form>
+                      )}
+                      {podeMarcarPronta && (
+                        <form action={alternarEspPronta}>
+                          <input type="hidden" name="id" value={e.id} />
+                          <input type="hidden" name="opportunityId" value={p.id} />
+                          <input type="hidden" name="pronta" value={e.pronta ? "0" : "1"} />
+                          <button
+                            type="submit"
+                            className="h-8 rounded-md border border-line px-3 text-xs font-medium text-muted transition-colors duration-150 hover:text-ink"
+                          >
+                            {e.pronta ? "Reabrir" : "Marcar pronta"}
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {podeCriarEsp && tiposFaltantes.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {tiposFaltantes.map((tipo) => (
+                <form key={tipo} action={criarEsp}>
+                  <input type="hidden" name="opportunityId" value={p.id} />
+                  <input type="hidden" name="tipo" value={tipo} />
+                  <button type="submit" className={btnAdicionar}>
+                    + {ESP_TIPO_LABELS[tipo]}
+                  </button>
+                </form>
+              ))}
+            </div>
+          )}
+
+          {p.esps.length === 0 && !podeCriarEsp && (
+            <p className="mt-4 text-sm text-muted">
+              Nenhuma ESP desmembrada ainda — aguardando o gestor de Propostas.
+            </p>
+          )}
+        </section>
       )}
 
       <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_340px]">

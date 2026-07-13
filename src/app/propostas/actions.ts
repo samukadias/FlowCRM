@@ -17,6 +17,7 @@ import { ehGestor, obterSessao, podeAgir, podeAtuar } from "@/lib/auth";
 import { notificarArea, notificarUsuario } from "@/lib/notificar";
 import { filtroPropostasVisiveis } from "@/lib/visibilidade";
 import { AnexoInvalido, salvarAnexo } from "@/lib/uploads";
+import { espsPendentes, resetarEspsPendentes } from "@/lib/esp";
 
 /** Gera o próximo código sequencial do ano, ex.: OPP-2026-0009. */
 async function proximoCodigo(prefixo: "OPP" | "CTR"): Promise<string> {
@@ -183,6 +184,11 @@ async function executarMovimentacao(
     });
   });
 
+  // Devolvida para ajustes: as ESPs precisam ser revisadas de novo.
+  if (para === "AJUSTES") {
+    await resetarEspsPendentes(proposta.id);
+  }
+
   // Avisa os gestores da área que passa a ser dona da fila (para delegarem)
   if (donoNovo && mudouDeMaos) {
     await notificarArea(
@@ -250,6 +256,12 @@ export async function moverProposta(formData: FormData) {
     redirect(`/propostas/${id}?erro=motivo_obrigatorio`);
   }
 
+  // Proposta Técnica só segue para verificação quando todas as ESPs
+  // estiverem prontas — a equipe de Propostas trabalha na ESP, não na proposta.
+  if (para === "EM_VERIFICACAO" && (await espsPendentes(proposta.id, proposta.tipo))) {
+    redirect(`/propostas/${id}?erro=esps_pendentes`);
+  }
+
   await executarMovimentacao(proposta, para, ator.id, {
     observacao,
     motivoPerda: precisaMotivo ? motivoPerda : undefined,
@@ -288,6 +300,7 @@ export async function moverPropostasEmMassa(formData: FormData) {
     const transicao = TRANSITIONS[proposta.stage]?.find((t) => t.para === para);
     if (!transicao) continue;
     if (!podeAtuar(ator, transicao.area, proposta.responsavelId)) continue;
+    if (para === "EM_VERIFICACAO" && (await espsPendentes(proposta.id, proposta.tipo))) continue;
     await executarMovimentacao(proposta, para, ator.id);
   }
 

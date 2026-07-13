@@ -8,6 +8,7 @@ export async function limparBanco() {
   await prisma.automationRule.deleteMany();
   await prisma.attestation.deleteMany();
   await prisma.contract.deleteMany();
+  await prisma.esp.deleteMany();
   await prisma.workflowEvent.deleteMany();
   await prisma.opportunity.deleteMany();
   await prisma.cliente.deleteMany();

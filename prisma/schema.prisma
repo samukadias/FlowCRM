@@ -48,6 +48,8 @@ model User {
 
   tarefasAtribuidas Tarefa[] @relation("ResponsavelTarefa")
   tarefasCriadas    Tarefa[] @relation("CriadorTarefa")
+
+  espsAtribuidas Esp[]
 }
 
 // Lembrete/follow-up. Pode estar ligada a uma proposta (mais comum) ou
@@ -182,6 +184,37 @@ model Opportunity {
   eventos  WorkflowEvent[]
   contrato Contract?
   tarefas  Tarefa[]
+  esps     Esp[]
+}
+
+// Classificação da ESP (Especificação dos Serviços). Uma oportunidade do
+// tipo Proposta Técnica pode ser desmembrada em até uma ESP de cada tipo.
+enum EspTipo {
+  ITOI
+  ITOD
+  APP
+}
+
+// Gerada pelo gestor de Propostas ao desmembrar o contrato (PD) de uma
+// oportunidade Proposta Técnica. A equipe de Propostas trabalha em cima da
+// ESP, não da oportunidade diretamente — a oportunidade só segue para
+// Verificação quando todas as suas ESPs estiverem prontas.
+model Esp {
+  id            String    @id @default(cuid())
+  // E + 3 dígitos do ano + 4 dígitos sequenciais — ex.: E0260430
+  numero        String    @unique
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id])
+  tipo          EspTipo
+  responsavelId String?
+  responsavel   User?     @relation(fields: [responsavelId], references: [id])
+  pronta        Boolean   @default(false)
+  prontaEm      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // No máximo uma ESP de cada tipo por oportunidade
+  @@unique([opportunityId, tipo])
 }
 
 // Regra configurável do alerta de estagnação (checagem horária em

@@ -160,3 +160,9 @@ src/test/              → infraestrutura de teste (banco, fixtures, mocks do Ne
 - [x] Ações em massa nas Filas: selecionar várias propostas de uma seção (mesma etapa) e mover ou delegar todas de uma vez, com a mesma regra de permissão da ação individual aplicada item a item
 - [x] Múltiplos contatos por cliente (entidade `Contact` própria, com um principal em destaque) e histórico consolidado por cliente em /clientes/[id]: todas as propostas e a atividade (mudanças de etapa, e-mails, notas, anexos) das propostas daquele cliente num só lugar
 - [x] Motor de automação configurável: o limiar fixo de 10 dias do alerta de estagnação virou regras editáveis em /automacoes (só ADMIN) — nome, etapa (ou "qualquer etapa"), dias parada e ativa/inativa; a checagem horária usa a regra específica da etapa quando existe, senão a regra coringa
+- [x] Campo de valor estimado formata em R$ com pontos de milhar em tempo real, enquanto o usuário digita
+- [x] Tela de Propostas (busca/listagem) só para gestor e admin; analista vê apenas Filas e Tarefas na navegação
+- [x] Nova proposta exige qualificação obrigatória do tipo: Orçamento Orientativo (OO) ou Proposta Técnica (RPT, PO e ESP)
+- [x] Enquanto a proposta não estiver encerrada, quem a registrou (ou o gestor Comercial) pode editar título, valor e descrição
+- [x] Proposta Técnica ganha automaticamente um número de contrato (PD + ano + sequência) ao entrar em tratativa com a Propostas; atribuído uma única vez, nunca reescrito
+- [x] Desmembramento em ESPs: o gestor de Propostas divide o contrato PD em ESPs (ITOI/ITOD/APP, no máximo uma de cada), com numeração automática (E + ano + sequência) e delegação a um analista; a proposta só segue para Verificação quando todas as ESPs estiverem prontas, e devolver para Ajustes reabre todas as ESPs

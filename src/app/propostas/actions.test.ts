@@ -32,6 +32,10 @@ const {
   registrarNota,
   registrarEmail,
 } = await import("./actions");
+const {
+  criarEsp: criarEspAction,
+  alternarEspPronta: alternarEspProntaAction,
+} = await import("./esp-actions");
 
 function logarComo(sessao: Sessao) {
   vi.mocked(obterSessao).mockResolvedValue(sessao);
@@ -429,6 +433,20 @@ describe("moverProposta", () => {
       fd.set("para", "EM_TRATATIVA");
       return fd;
     })());
+    await criarEspAction((() => {
+      const fd = new FormData();
+      fd.set("opportunityId", proposta.id);
+      fd.set("tipo", "ITOI");
+      return fd;
+    })());
+    const esp = await prisma.esp.findFirstOrThrow({ where: { opportunityId: proposta.id } });
+    await alternarEspProntaAction((() => {
+      const fd = new FormData();
+      fd.set("id", esp.id);
+      fd.set("opportunityId", proposta.id);
+      fd.set("pronta", "1");
+      return fd;
+    })());
     await moverProposta((() => {
       const fd = new FormData();
       fd.set("id", proposta.id);
@@ -444,6 +462,9 @@ describe("moverProposta", () => {
       return fd;
     })());
 
+    const espAposAjustes = await prisma.esp.findUniqueOrThrow({ where: { id: esp.id } });
+    expect(espAposAjustes.pronta).toBe(false);
+
     logarComo(sessaoDe(gestorPropostas));
     await moverProposta((() => {
       const fd = new FormData();
@@ -454,6 +475,115 @@ describe("moverProposta", () => {
 
     const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
     expect(atual.numeroContratoTecnico).toBe("PD260015");
+  });
+
+  it("não avança para verificação sem nenhuma ESP desmembrada", async () => {
+    const { comercial, cliente } = await cenarioBase();
+    const gestorPropostas = await criarUsuario("PROPOSTAS", "GESTOR");
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: comercial.id,
+      stage: "ENTRADA",
+      tipo: "PROPOSTA_TECNICA",
+      codigo: "OPP-2026-0016",
+    });
+    logarComo(sessaoDe(gestorPropostas));
+    await moverProposta((() => {
+      const fd = new FormData();
+      fd.set("id", proposta.id);
+      fd.set("para", "EM_TRATATIVA");
+      return fd;
+    })());
+
+    await expect(
+      moverProposta(
+        (() => {
+          const fd = new FormData();
+          fd.set("id", proposta.id);
+          fd.set("para", "EM_VERIFICACAO");
+          return fd;
+        })(),
+      ),
+    ).rejects.toBeInstanceOf(RedirectError);
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.stage).toBe("EM_TRATATIVA");
+  });
+
+  it("não avança para verificação com uma ESP ainda em elaboração", async () => {
+    const { comercial, cliente } = await cenarioBase();
+    const gestorPropostas = await criarUsuario("PROPOSTAS", "GESTOR");
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: comercial.id,
+      stage: "ENTRADA",
+      tipo: "PROPOSTA_TECNICA",
+      codigo: "OPP-2026-0017",
+    });
+    logarComo(sessaoDe(gestorPropostas));
+    await moverProposta((() => {
+      const fd = new FormData();
+      fd.set("id", proposta.id);
+      fd.set("para", "EM_TRATATIVA");
+      return fd;
+    })());
+    await criarEspAction((() => {
+      const fd = new FormData();
+      fd.set("opportunityId", proposta.id);
+      fd.set("tipo", "ITOI");
+      return fd;
+    })());
+    await criarEspAction((() => {
+      const fd = new FormData();
+      fd.set("opportunityId", proposta.id);
+      fd.set("tipo", "ITOD");
+      return fd;
+    })());
+    const [itoi] = await prisma.esp.findMany({
+      where: { opportunityId: proposta.id, tipo: "ITOI" },
+    });
+    await alternarEspProntaAction((() => {
+      const fd = new FormData();
+      fd.set("id", itoi.id);
+      fd.set("opportunityId", proposta.id);
+      fd.set("pronta", "1");
+      return fd;
+    })());
+    // ITOD continua em elaboração — ainda não pode avançar
+
+    await expect(
+      moverProposta(
+        (() => {
+          const fd = new FormData();
+          fd.set("id", proposta.id);
+          fd.set("para", "EM_VERIFICACAO");
+          return fd;
+        })(),
+      ),
+    ).rejects.toBeInstanceOf(RedirectError);
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.stage).toBe("EM_TRATATIVA");
+  });
+
+  it("orçamento orientativo avança para verificação mesmo sem ESP", async () => {
+    const { comercial, cliente } = await cenarioBase();
+    const gestorPropostas = await criarUsuario("PROPOSTAS", "GESTOR");
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: comercial.id,
+      stage: "EM_TRATATIVA",
+      tipo: "ORCAMENTO_ORIENTATIVO",
+    });
+    logarComo(sessaoDe(gestorPropostas));
+
+    const fd = new FormData();
+    fd.set("id", proposta.id);
+    fd.set("para", "EM_VERIFICACAO");
+    await moverProposta(fd);
+
+    const atual = await prisma.opportunity.findUniqueOrThrow({ where: { id: proposta.id } });
+    expect(atual.stage).toBe("EM_VERIFICACAO");
   });
 
   it("aceite gera o contrato automaticamente e notifica Contratos e Faturamento", async () => {
