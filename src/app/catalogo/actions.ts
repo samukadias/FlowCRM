@@ -17,16 +17,17 @@ async function exigirAdmin() {
 
 function normalizar(formData: FormData) {
   const nome = String(formData.get("nome") ?? "").trim();
+  const categoria = String(formData.get("categoria") ?? "").trim();
   const unidade = String(formData.get("unidade") ?? "").trim();
   // CampoValorDecimal já envia um decimal puro (ex.: "4.80") no input escondido.
   const valorUnitarioPadrao = Number(String(formData.get("valorUnitarioPadrao") ?? ""));
-  return { nome, unidade, valorUnitarioPadrao, ativo: formData.get("ativo") === "on" };
+  return { nome, categoria, unidade, valorUnitarioPadrao, ativo: formData.get("ativo") === "on" };
 }
 
 export async function criarProduto(formData: FormData) {
   if (!(await exigirAdmin())) return;
   const dados = normalizar(formData);
-  if (!dados.nome || !dados.unidade || !Number.isFinite(dados.valorUnitarioPadrao)) {
+  if (!dados.nome || !dados.categoria || !dados.unidade || !Number.isFinite(dados.valorUnitarioPadrao)) {
     redirect("/catalogo?erro=dados_invalidos");
   }
 
@@ -47,7 +48,7 @@ export async function atualizarProduto(formData: FormData) {
   if (!(await exigirAdmin())) return;
   const id = String(formData.get("id") ?? "");
   const dados = normalizar(formData);
-  if (!id || !dados.nome || !dados.unidade || !Number.isFinite(dados.valorUnitarioPadrao)) {
+  if (!id || !dados.nome || !dados.categoria || !dados.unidade || !Number.isFinite(dados.valorUnitarioPadrao)) {
     redirect("/catalogo?erro=dados_invalidos");
   }
 

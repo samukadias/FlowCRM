@@ -229,6 +229,7 @@ model Esp {
 model ProdutoServico {
   id                  String   @id @default(cuid())
   nome                String   @unique
+  categoria           String // ex.: "3.9 Certificado Digital" — agrupa a listagem do catálogo
   unidade             String // ex.: GB, certificado, licença, hora
   valorUnitarioPadrao Decimal  @db.Decimal(14, 2)
   ativo               Boolean  @default(true)
@@ -236,6 +237,8 @@ model ProdutoServico {
   updatedAt           DateTime @updatedAt
 
   itens EspItem[]
+
+  @@index([categoria])
 }
 
 // Linha da PO (Planilha Orçamentária) de uma ESP: quantidade recorrente

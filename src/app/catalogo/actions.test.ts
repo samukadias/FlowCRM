@@ -44,6 +44,7 @@ describe("criarProduto", () => {
 
     const fd = new FormData();
     fd.set("nome", "Certificado Digital e-CPF");
+    fd.set("categoria", "3.9 Certificado Digital");
     fd.set("unidade", "certificado");
     fd.set("valorUnitarioPadrao", "120.00");
     fd.set("ativo", "on");
@@ -52,6 +53,7 @@ describe("criarProduto", () => {
     const produto = await prisma.produtoServico.findUniqueOrThrow({
       where: { nome: "Certificado Digital e-CPF" },
     });
+    expect(produto.categoria).toBe("3.9 Certificado Digital");
     expect(produto.unidade).toBe("certificado");
     expect(Number(produto.valorUnitarioPadrao)).toBe(120);
     expect(produto.ativo).toBe(true);
@@ -77,6 +79,7 @@ describe("criarProduto", () => {
 
     const fd = new FormData();
     fd.set("nome", "Licença Office 365");
+    fd.set("categoria", "Teste");
     fd.set("unidade", "licença");
     fd.set("valorUnitarioPadrao", "50.00");
     await expect(criarProdutoAction(fd)).rejects.toBeInstanceOf(RedirectError);
@@ -94,6 +97,7 @@ describe("atualizarProduto", () => {
     const fd = new FormData();
     fd.set("id", produto.id);
     fd.set("nome", produto.nome);
+    fd.set("categoria", produto.categoria);
     fd.set("unidade", produto.unidade);
     fd.set("valorUnitarioPadrao", "5.50");
     await expect(atualizarProduto(fd)).rejects.toBeInstanceOf(RedirectError);

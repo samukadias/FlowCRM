@@ -18,7 +18,19 @@ const MENSAGENS_ERRO: Record<string, string> = {
   duplicado: "Já existe um produto ou serviço com este nome.",
 };
 
-function CamposProduto({ nome, unidade, valorUnitarioPadrao, ativo }: { nome?: string; unidade?: string; valorUnitarioPadrao?: number; ativo?: boolean }) {
+function CamposProduto({
+  nome,
+  categoria,
+  unidade,
+  valorUnitarioPadrao,
+  ativo,
+}: {
+  nome?: string;
+  categoria?: string;
+  unidade?: string;
+  valorUnitarioPadrao?: number;
+  ativo?: boolean;
+}) {
   return (
     <>
       <label className="min-w-40 flex-1 text-xs font-medium text-muted">
@@ -28,6 +40,16 @@ function CamposProduto({ nome, unidade, valorUnitarioPadrao, ativo }: { nome?: s
           required
           defaultValue={nome}
           placeholder="Ex.: Certificado Digital e-CPF"
+          className={`${campo} mt-1 w-full`}
+        />
+      </label>
+      <label className="min-w-40 flex-1 text-xs font-medium text-muted">
+        Categoria
+        <input
+          name="categoria"
+          required
+          defaultValue={categoria}
+          placeholder="Ex.: 3.9 Certificado Digital"
           className={`${campo} mt-1 w-full`}
         />
       </label>
@@ -65,11 +87,18 @@ export default async function Catalogo({
 
   const produtos = await prisma.produtoServico.findMany({
     include: { _count: { select: { itens: true } } },
-    orderBy: [{ ativo: "desc" }, { nome: "asc" }],
+    orderBy: [{ ativo: "desc" }, { categoria: "asc" }, { nome: "asc" }],
   });
 
+  const grupos: { categoria: string; produtos: typeof produtos }[] = [];
+  for (const p of produtos) {
+    const grupo = grupos.find((g) => g.categoria === p.categoria);
+    if (grupo) grupo.produtos.push(p);
+    else grupos.push({ categoria: p.categoria, produtos: [p] });
+  }
+
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-4xl">
       <h1 className="text-2xl font-semibold tracking-tight">Catálogo de serviços</h1>
       <p className="mt-1 text-sm text-muted">
         Produtos e serviços de informática com o preço unitário padrão — base para os
@@ -97,56 +126,64 @@ export default async function Catalogo({
           Nenhum produto ou serviço cadastrado ainda.
         </p>
       ) : (
-        <ul className="mt-6 space-y-3">
-          {produtos.map((p) => (
-            <li key={p.id} className={`card p-4 ${p.ativo ? "" : "opacity-60"}`}>
-              <form action={atualizarProduto} className="flex flex-wrap items-end gap-3">
-                <input type="hidden" name="id" value={p.id} />
-                <CamposProduto
-                  nome={p.nome}
-                  unidade={p.unidade}
-                  valorUnitarioPadrao={Number(p.valorUnitarioPadrao)}
-                  ativo={p.ativo}
-                />
-                <button
-                  type="submit"
-                  className="h-9 rounded-md border border-line px-3 text-xs font-medium text-muted transition-colors duration-150 hover:text-ink"
-                >
-                  Salvar
-                </button>
-              </form>
-              <div className="mt-2 flex items-center gap-3">
-                <span className="text-xs text-faint tabular-nums">
-                  {brlUnitario.format(Number(p.valorUnitarioPadrao))} / {p.unidade} ·{" "}
-                  {p._count.itens === 1 ? "1 item de ESP" : `${p._count.itens} itens de ESP`}
-                </span>
-                <form action={alternarProdutoAtivo}>
-                  <input type="hidden" name="id" value={p.id} />
-                  <input type="hidden" name="ativo" value={p.ativo ? "0" : "1"} />
-                  <button
-                    type="submit"
-                    className="text-xs font-medium text-muted transition-colors duration-150 hover:text-ink"
-                  >
-                    {p.ativo ? "Desativar" : "Ativar"}
-                  </button>
-                </form>
-                {p._count.itens === 0 && (
-                  <form action={excluirProduto}>
-                    <input type="hidden" name="id" value={p.id} />
-                    <button
-                      type="submit"
-                      aria-label={`Excluir ${p.nome}`}
-                      className="flex items-center gap-1 text-xs font-medium text-faint transition-colors duration-150 hover:text-danger"
-                    >
-                      <Trash2 size={13} strokeWidth={1.75} />
-                      Excluir
-                    </button>
-                  </form>
-                )}
-              </div>
-            </li>
+        <div className="mt-6 space-y-8">
+          {grupos.map((g) => (
+            <section key={g.categoria}>
+              <h2 className="text-xs font-semibold tracking-wide text-muted uppercase">{g.categoria}</h2>
+              <ul className="mt-2 space-y-3">
+                {g.produtos.map((p) => (
+                  <li key={p.id} className={`card p-4 ${p.ativo ? "" : "opacity-60"}`}>
+                    <form action={atualizarProduto} className="flex flex-wrap items-end gap-3">
+                      <input type="hidden" name="id" value={p.id} />
+                      <CamposProduto
+                        nome={p.nome}
+                        categoria={p.categoria}
+                        unidade={p.unidade}
+                        valorUnitarioPadrao={Number(p.valorUnitarioPadrao)}
+                        ativo={p.ativo}
+                      />
+                      <button
+                        type="submit"
+                        className="h-9 rounded-md border border-line px-3 text-xs font-medium text-muted transition-colors duration-150 hover:text-ink"
+                      >
+                        Salvar
+                      </button>
+                    </form>
+                    <div className="mt-2 flex items-center gap-3">
+                      <span className="text-xs text-faint tabular-nums">
+                        {brlUnitario.format(Number(p.valorUnitarioPadrao))} / {p.unidade} ·{" "}
+                        {p._count.itens === 1 ? "1 item de ESP" : `${p._count.itens} itens de ESP`}
+                      </span>
+                      <form action={alternarProdutoAtivo}>
+                        <input type="hidden" name="id" value={p.id} />
+                        <input type="hidden" name="ativo" value={p.ativo ? "0" : "1"} />
+                        <button
+                          type="submit"
+                          className="text-xs font-medium text-muted transition-colors duration-150 hover:text-ink"
+                        >
+                          {p.ativo ? "Desativar" : "Ativar"}
+                        </button>
+                      </form>
+                      {p._count.itens === 0 && (
+                        <form action={excluirProduto}>
+                          <input type="hidden" name="id" value={p.id} />
+                          <button
+                            type="submit"
+                            aria-label={`Excluir ${p.nome}`}
+                            className="flex items-center gap-1 text-xs font-medium text-faint transition-colors duration-150 hover:text-danger"
+                          >
+                            <Trash2 size={13} strokeWidth={1.75} />
+                            Excluir
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

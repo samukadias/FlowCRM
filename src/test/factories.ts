@@ -58,11 +58,12 @@ export async function criarProposta(params: {
   });
 }
 
-export async function criarProduto(params: { nome?: string; unidade?: string; valorUnitarioPadrao?: number; ativo?: boolean } = {}) {
+export async function criarProduto(params: { nome?: string; categoria?: string; unidade?: string; valorUnitarioPadrao?: number; ativo?: boolean } = {}) {
   const id = sufixo();
   return prisma.produtoServico.create({
     data: {
       nome: params.nome ?? `Produto Teste ${id}`,
+      categoria: params.categoria ?? "Teste",
       unidade: params.unidade ?? "unidade",
       valorUnitarioPadrao: params.valorUnitarioPadrao ?? 10,
       ativo: params.ativo ?? true,
