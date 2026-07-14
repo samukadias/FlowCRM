@@ -6,6 +6,7 @@ import type { AttestationStatus, HealthStatus } from "@/generated/prisma/enums";
 import { ATESTACAO_ACOES } from "@/lib/flow";
 import { ehGestor, obterSessao, podeAtuar } from "@/lib/auth";
 import { notificarUsuario } from "@/lib/notificar";
+import { itensDaOportunidade, valorMensalPlanejado } from "@/lib/esp";
 
 export async function atualizarSaude(formData: FormData) {
   const id = String(formData.get("id") ?? "");
@@ -33,7 +34,11 @@ export async function moverAtestacao(formData: FormData) {
   revalidatePath("/filas", "layout");
 }
 
-/** Cria a atestação da competência corrente (valor mensal = valor do contrato ÷ 12). */
+/** Cria a atestação da competência corrente. Quando a oportunidade tem itens
+ * de ESP (PO), o valor nasce da soma quantidadeMensal × valorUnitario dos
+ * itens, com uma medição por item (quantidade inicial = a contratada) para o
+ * Faturamento ajustar ao que o cliente de fato consumiu. Sem itens, mantém o
+ * cálculo antigo (valor do contrato ÷ 12). */
 export async function gerarAtestacao(formData: FormData) {
   // Gerar é verbo de gestor: a atestação nasce sem responsável, para ser delegada
   if (!ehGestor(await obterSessao(), "FATURAMENTO")) return;
@@ -41,16 +46,65 @@ export async function gerarAtestacao(formData: FormData) {
   const contrato = await prisma.contract.findUniqueOrThrow({ where: { id: contractId } });
   const competencia = new Date().toISOString().slice(0, 7);
 
-  await prisma.attestation.upsert({
+  const jaExiste = await prisma.attestation.findUnique({
     where: { contractId_competencia: { contractId, competencia } },
-    update: {},
-    create: {
-      contractId,
-      competencia,
-      valor: Math.round((Number(contrato.valor) / 12) * 100) / 100,
-      status: "PENDENTE",
-    },
   });
+  if (jaExiste) return;
+
+  const itens = await itensDaOportunidade(contrato.opportunityId);
+  const valor =
+    itens.length > 0
+      ? valorMensalPlanejado(itens)
+      : Math.round((Number(contrato.valor) / 12) * 100) / 100;
+
+  await prisma.$transaction(async (tx) => {
+    const atestacao = await tx.attestation.create({
+      data: { contractId, competencia, valor, status: "PENDENTE" },
+    });
+    if (itens.length > 0) {
+      await tx.medicao.createMany({
+        data: itens.map((i) => ({
+          attestationId: atestacao.id,
+          espItemId: i.id,
+          quantidade: i.quantidadeMensal,
+        })),
+      });
+    }
+  });
+
+  revalidatePath("/filas", "layout");
+}
+
+/** Faturamento ajusta a quantidade medida de um item naquela competência —
+ * o quanto o cliente de fato consumiu, que pode divergir do contratado.
+ * Recalcula o valor da atestação como a soma de todas as medições. */
+export async function atualizarMedicao(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const attestationId = String(formData.get("attestationId") ?? "");
+  const quantidade = Number(String(formData.get("quantidade") ?? "").replace(",", "."));
+  if (!id || !attestationId || !Number.isFinite(quantidade) || quantidade < 0) return;
+
+  const sessao = await obterSessao();
+  const atestacao = await prisma.attestation.findUnique({ where: { id: attestationId } });
+  if (!atestacao || atestacao.status === "FATURADA") return;
+  if (!podeAtuar(sessao, "FATURAMENTO", atestacao.responsavelId)) return;
+
+  const medicao = await prisma.medicao.findUnique({ where: { id } });
+  if (!medicao || medicao.attestationId !== attestationId) return;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.medicao.update({ where: { id }, data: { quantidade } });
+    const todas = await tx.medicao.findMany({
+      where: { attestationId },
+      include: { espItem: true },
+    });
+    const novoValor = todas.reduce(
+      (s, m) => s + Number(m.quantidade) * Number(m.espItem.valorUnitario),
+      0,
+    );
+    await tx.attestation.update({ where: { id: attestationId }, data: { valor: novoValor } });
+  });
+
   revalidatePath("/filas", "layout");
 }
 

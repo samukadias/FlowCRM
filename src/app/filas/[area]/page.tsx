@@ -12,7 +12,7 @@ import {
   QUEUES,
   STAGE_META,
 } from "@/lib/flow";
-import { brl, dataCurta } from "@/lib/format";
+import { brl, brlUnitario, dataCurta } from "@/lib/format";
 import {
   delegarProposta,
   delegarPropostasEmMassa,
@@ -21,12 +21,14 @@ import {
 } from "@/app/propostas/actions";
 import { FilaSelecao, type ItemFila } from "@/components/fila-selecao";
 import {
+  atualizarMedicao,
   atualizarSaude,
   delegarAtestacao,
   delegarContrato,
   gerarAtestacao,
   moverAtestacao,
 } from "@/app/filas/actions";
+import { itensDaOportunidade, valorMensalPlanejado } from "@/lib/esp";
 import { Pill } from "@/components/pill";
 import { ehGestor, obterSessao, podeAtuar, type Sessao } from "@/lib/auth";
 
@@ -342,15 +344,25 @@ async function FilaFaturamento({ sessao }: { sessao: Sessao | null }) {
           include: { opportunity: { include: { cliente: { select: { nome: true } } } } },
         },
         responsavel: { select: { name: true } },
+        medicoes: { include: { espItem: { include: { produto: true } } } },
       },
       orderBy: { competencia: "asc" },
     }),
     gestor ? equipeDaArea("FATURAMENTO") : Promise.resolve([] as Equipe),
   ]);
 
-  const semCompetencia = gestor
+  const semCompetenciaBase = gestor
     ? contratos.filter((c) => !c.atestacoes.some((a) => a.competencia === competencia))
     : [];
+  // Contratos com itens de PO faturam pelo consumo planejado (soma dos itens);
+  // sem itens, mantém a estimativa antiga (valor do contrato ÷ 12).
+  const semCompetencia = await Promise.all(
+    semCompetenciaBase.map(async (c) => {
+      const itens = await itensDaOportunidade(c.opportunityId);
+      const valorPlanejado = itens.length > 0 ? valorMensalPlanejado(itens) : Number(c.valor) / 12;
+      return { ...c, valorPlanejado };
+    }),
+  );
 
   const grupos: { status: keyof typeof ATESTACAO_ACOES; titulo: string }[] = [
     { status: "PENDENTE", titulo: "Aguardando confirmação do cliente" },
@@ -377,7 +389,7 @@ async function FilaFaturamento({ sessao }: { sessao: Sessao | null }) {
         <Secao
           titulo={`Sem atestação na competência ${competencia}`}
           qtd={semCompetencia.length}
-          valor={semCompetencia.reduce((s, c) => s + Number(c.valor) / 12, 0)}
+          valor={semCompetencia.reduce((s, c) => s + c.valorPlanejado, 0)}
         >
           <ul className="mt-3 card divide-y divide-line-soft overflow-hidden">
             {semCompetencia.map((c) => (
@@ -402,7 +414,7 @@ async function FilaFaturamento({ sessao }: { sessao: Sessao | null }) {
                   </p>
                 </div>
                 <p className="text-sm font-medium tabular-nums">
-                  {brl.format(Number(c.valor) / 12)}
+                  {brl.format(c.valorPlanejado)}
                   <span className="block text-xs font-normal text-muted">por mês</span>
                 </p>
                 <form action={gerarAtestacao}>
@@ -482,6 +494,55 @@ async function FilaFaturamento({ sessao }: { sessao: Sessao | null }) {
                         />
                       )}
                     </div>
+
+                    {a.medicoes.length > 0 && (
+                      <ul className="space-y-1 border-t border-line-soft pt-3 md:col-span-3">
+                        {a.medicoes.map((m) => (
+                          <li
+                            key={m.id}
+                            className="flex flex-wrap items-center justify-between gap-2 text-xs"
+                          >
+                            <span className="text-muted">
+                              {m.espItem.produto.nome}{" "}
+                              <span className="text-faint">
+                                (contratado: {Number(m.espItem.quantidadeMensal)} {m.espItem.produto.unidade}/mês
+                                × {brlUnitario.format(Number(m.espItem.valorUnitario))})
+                              </span>
+                            </span>
+                            {podeMexer ? (
+                              <form action={atualizarMedicao} className="flex items-center gap-1.5">
+                                <input type="hidden" name="id" value={m.id} />
+                                <input type="hidden" name="attestationId" value={a.id} />
+                                <label className="sr-only" htmlFor={`medicao-${m.id}`}>
+                                  Quantidade consumida — {m.espItem.produto.nome}
+                                </label>
+                                <input
+                                  id={`medicao-${m.id}`}
+                                  type="number"
+                                  name="quantidade"
+                                  step="0.01"
+                                  min="0"
+                                  defaultValue={Number(m.quantidade)}
+                                  className="h-7 w-20 rounded-md border border-line bg-canvas px-2 text-xs outline-none focus:border-brand"
+                                />
+                                <span className="text-faint">{m.espItem.produto.unidade}</span>
+                                <button
+                                  type="submit"
+                                  className="h-7 rounded-md border border-line px-2 text-xs font-medium text-muted transition-colors duration-150 hover:text-ink"
+                                >
+                                  Salvar
+                                </button>
+                              </form>
+                            ) : (
+                              <span className="font-medium tabular-nums">
+                                {Number(m.quantidade)} {m.espItem.produto.unidade} ·{" "}
+                                {brl.format(Number(m.quantidade) * Number(m.espItem.valorUnitario))}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </li>
                 );
               })}

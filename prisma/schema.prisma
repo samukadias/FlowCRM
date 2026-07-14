@@ -256,6 +256,8 @@ model EspItem {
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
 
+  medicoes Medicao[]
+
   @@index([espId])
 }
 
@@ -354,5 +356,25 @@ model Attestation {
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
+  medicoes Medicao[]
+
   @@unique([contractId, competencia])
+}
+
+// Apontamento mensal de consumo de um item da PO (EspItem) dentro de uma
+// atestação — ex.: "20 GB consumidos em 2026-07". Gerada automaticamente
+// (com a quantidade contratada como valor inicial) quando a atestação da
+// competência é criada; o Faturamento ajusta para o que o cliente de fato
+// consumiu. A soma das medições recalcula Attestation.valor a cada ajuste.
+model Medicao {
+  id            String      @id @default(cuid())
+  attestationId String
+  attestation   Attestation @relation(fields: [attestationId], references: [id], onDelete: Cascade)
+  espItemId     String
+  espItem       EspItem     @relation(fields: [espItemId], references: [id], onDelete: Cascade)
+  quantidade    Decimal     @db.Decimal(12, 2)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([attestationId, espItemId])
 }
