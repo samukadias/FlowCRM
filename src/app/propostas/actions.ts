@@ -17,7 +17,7 @@ import { ehGestor, obterSessao, podeAgir, podeAtuar } from "@/lib/auth";
 import { notificarArea, notificarUsuario } from "@/lib/notificar";
 import { filtroPropostasVisiveis } from "@/lib/visibilidade";
 import { AnexoInvalido, salvarAnexo } from "@/lib/uploads";
-import { espsPendentes, resetarEspsPendentes } from "@/lib/esp";
+import { espsPendentes, resetarEspsPendentes, itensDaOportunidade } from "@/lib/esp";
 
 /** Gera o próximo código sequencial do ano, ex.: OPP-2026-0009. */
 async function proximoCodigo(prefixo: "OPP" | "CTR"): Promise<string> {
@@ -199,20 +199,33 @@ async function executarMovimentacao(
     );
   }
 
-  // Aceite gera o contrato automaticamente (vigência inicial de 12 meses).
+  // Aceite gera o contrato automaticamente. Com itens de PO, o valor é a soma
+  // dos itens para todo o período e a vigência acompanha o maior período
+  // contratual; sem itens, vale o estimado comercial e 12 meses.
   if (para === "ACEITA") {
     const existente = await prisma.contract.findUnique({ where: { opportunityId: proposta.id } });
     if (!existente) {
+      const itens = await itensDaOportunidade(proposta.id);
+      const valor =
+        itens.length > 0
+          ? itens.reduce(
+              (s, i) =>
+                s + Number(i.quantidadeMensal) * Number(i.valorUnitario) * i.periodoContratualMeses,
+              0,
+            )
+          : Number(proposta.valorEstimado ?? 0);
+      const meses =
+        itens.length > 0 ? Math.max(...itens.map((i) => i.periodoContratualMeses)) : 12;
       const inicio = new Date();
       const fim = new Date(inicio);
-      fim.setFullYear(fim.getFullYear() + 1);
+      fim.setMonth(fim.getMonth() + meses);
       const contrato = await prisma.contract.create({
         data: {
           opportunityId: proposta.id,
           numero: await proximoCodigo("CTR"),
           inicioVigencia: inicio,
           fimVigencia: fim,
-          valor: proposta.valorEstimado ?? 0,
+          valor,
         },
       });
       await Promise.all([

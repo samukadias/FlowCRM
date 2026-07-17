@@ -78,14 +78,23 @@ function CamposProduto({
 export default async function Catalogo({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string }>;
+  searchParams: Promise<{ erro?: string; q?: string }>;
 }) {
   const sessao = await obterSessao();
   if (!sessao) redirect("/login");
   if (sessao.area !== "ADMIN") redirect("/");
-  const { erro } = await searchParams;
+  const { erro, q } = await searchParams;
+  const busca = (q ?? "").trim();
 
   const produtos = await prisma.produtoServico.findMany({
+    where: busca
+      ? {
+          OR: [
+            { nome: { contains: busca, mode: "insensitive" } },
+            { categoria: { contains: busca, mode: "insensitive" } },
+          ],
+        }
+      : undefined,
     include: { _count: { select: { itens: true } } },
     orderBy: [{ ativo: "desc" }, { categoria: "asc" }, { nome: "asc" }],
   });
@@ -121,9 +130,33 @@ export default async function Catalogo({
         </button>
       </form>
 
+      <form method="GET" action="/catalogo" className="mt-6 flex items-center gap-2">
+        <input
+          type="search"
+          name="q"
+          defaultValue={busca}
+          placeholder="Buscar por nome ou categoria…"
+          aria-label="Buscar no catálogo"
+          className={`${campo} w-full max-w-sm`}
+        />
+        <button
+          type="submit"
+          className="h-9 rounded-md border border-line px-3 text-xs font-medium text-muted transition-colors duration-150 hover:text-ink"
+        >
+          Buscar
+        </button>
+        {busca && (
+          <a href="/catalogo" className="text-xs font-medium text-muted hover:text-ink">
+            Limpar
+          </a>
+        )}
+      </form>
+
       {produtos.length === 0 ? (
         <p className="mt-6 rounded-xl border border-dashed border-line px-5 py-8 text-center text-sm text-muted">
-          Nenhum produto ou serviço cadastrado ainda.
+          {busca
+            ? `Nenhum produto encontrado para “${busca}”.`
+            : "Nenhum produto ou serviço cadastrado ainda."}
         </p>
       ) : (
         <div className="mt-6 space-y-8">

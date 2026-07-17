@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { limparBanco } from "@/test/db";
-import { criarCliente, criarProposta, criarUsuario } from "@/test/factories";
+import { criarCliente, criarProduto, criarProposta, criarUsuario } from "@/test/factories";
 import { RedirectError } from "@/test/next-mocks";
 import type { Sessao } from "@/lib/auth-core";
 
@@ -612,6 +612,45 @@ describe("moverProposta", () => {
 
     expect(await prisma.notification.count({ where: { userId: gestorContratos.id } })).toBe(1);
     expect(await prisma.notification.count({ where: { userId: gestorFaturamento.id } })).toBe(1);
+  });
+
+  it("com itens de PO, o contrato nasce com a soma dos itens e vigência do maior período", async () => {
+    const { comercial, cliente } = await cenarioBase();
+    const proposta = await criarProposta({
+      clienteId: cliente.id,
+      criadoPorId: comercial.id,
+      stage: "ENVIADA_CLIENTE",
+      tipo: "PROPOSTA_TECNICA",
+      valorEstimado: 999_999, // deve ser ignorado quando há itens
+    });
+    const esp = await prisma.esp.create({
+      data: { opportunityId: proposta.id, tipo: "ITOI", numero: "E0260777", pronta: true },
+    });
+    const produto = await criarProduto({ valorUnitarioPadrao: 4.8, unidade: "GB" });
+    await prisma.espItem.create({
+      data: {
+        espId: esp.id,
+        produtoId: produto.id,
+        quantidadeMensal: 20,
+        periodoContratualMeses: 24,
+        valorUnitario: 4.8,
+      },
+    });
+    logarComo(sessaoDe(comercial));
+
+    const fd = new FormData();
+    fd.set("id", proposta.id);
+    fd.set("para", "ACEITA");
+    await moverProposta(fd);
+
+    const contrato = await prisma.contract.findUniqueOrThrow({
+      where: { opportunityId: proposta.id },
+    });
+    expect(Number(contrato.valor)).toBe(2304); // 20 × 4,80 × 24 meses
+    const mesesVigencia =
+      (contrato.fimVigencia!.getFullYear() - contrato.inicioVigencia.getFullYear()) * 12 +
+      (contrato.fimVigencia!.getMonth() - contrato.inicioVigencia.getMonth());
+    expect(mesesVigencia).toBe(24);
   });
 
   it("recusa não gera contrato", async () => {

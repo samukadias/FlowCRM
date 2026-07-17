@@ -38,6 +38,7 @@ import { StageBadge } from "@/components/stage-badge";
 import { Pill } from "@/components/pill";
 import { CampoValor } from "@/components/campo-valor";
 import { CampoValorDecimal } from "@/components/campo-valor-decimal";
+import { SeletorProduto } from "@/components/seletor-produto";
 import { ProposalTimeline, type TimelineItem } from "@/components/proposal-timeline";
 import { ehGestor, obterSessao, podeAtuar } from "@/lib/auth";
 import { filtroPropostasVisiveis } from "@/lib/visibilidade";
@@ -137,10 +138,17 @@ export default async function DetalheProposta({
     p.tipo === "PROPOSTA_TECNICA"
       ? prisma.produtoServico.findMany({
           where: { ativo: true },
-          orderBy: { nome: "asc" },
+          orderBy: [{ categoria: "asc" }, { nome: "asc" }],
         })
       : Promise.resolve([]),
   ]);
+  // Client Components não recebem Decimal do Prisma — só os campos simples.
+  const opcoesProduto = produtosAtivos.map((prod) => ({
+    id: prod.id,
+    nome: prod.nome,
+    categoria: prod.categoria,
+    unidade: prod.unidade,
+  }));
 
   const [tarefas, todosUsuarios] = await Promise.all([
     prisma.tarefa.findMany({
@@ -530,23 +538,9 @@ export default async function DetalheProposta({
                       >
                         <input type="hidden" name="espId" value={e.id} />
                         <input type="hidden" name="opportunityId" value={p.id} />
-                        <label className="min-w-36 flex-1 text-xs font-medium text-muted">
+                        <label className="min-w-56 flex-1 text-xs font-medium text-muted">
                           Produto/serviço
-                          <select
-                            name="produtoId"
-                            required
-                            defaultValue=""
-                            className={`${campoTexto} mt-1`}
-                          >
-                            <option value="" disabled>
-                              Selecione
-                            </option>
-                            {produtosAtivos.map((prod) => (
-                              <option key={prod.id} value={prod.id}>
-                                {prod.nome} ({prod.unidade})
-                              </option>
-                            ))}
-                          </select>
+                          <SeletorProduto name="produtoId" opcoes={opcoesProduto} />
                         </label>
                         <label className="w-24 text-xs font-medium text-muted">
                           Qtd/mês
