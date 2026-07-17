@@ -222,7 +222,10 @@ async function executarMovimentacao(
       const contrato = await prisma.contract.create({
         data: {
           opportunityId: proposta.id,
-          numero: await proximoCodigo("CTR"),
+          // O número do contrato é o PD já atribuído à proposta técnica — é
+          // único e é ele que o cliente conhece. CTR fica só para propostas
+          // sem PD (orçamento orientativo / registros antigos).
+          numero: proposta.numeroContratoTecnico ?? (await proximoCodigo("CTR")),
           inicioVigencia: inicio,
           fimVigencia: fim,
           valor,

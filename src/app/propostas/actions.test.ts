@@ -614,7 +614,7 @@ describe("moverProposta", () => {
     expect(await prisma.notification.count({ where: { userId: gestorFaturamento.id } })).toBe(1);
   });
 
-  it("com itens de PO, o contrato nasce com a soma dos itens e vigência do maior período", async () => {
+  it("com itens de PO, o contrato nasce com a soma dos itens, vigência do maior período e o número PD", async () => {
     const { comercial, cliente } = await cenarioBase();
     const proposta = await criarProposta({
       clienteId: cliente.id,
@@ -622,6 +622,10 @@ describe("moverProposta", () => {
       stage: "ENVIADA_CLIENTE",
       tipo: "PROPOSTA_TECNICA",
       valorEstimado: 999_999, // deve ser ignorado quando há itens
+    });
+    await prisma.opportunity.update({
+      where: { id: proposta.id },
+      data: { numeroContratoTecnico: "PD269999" },
     });
     const esp = await prisma.esp.create({
       data: { opportunityId: proposta.id, tipo: "ITOI", numero: "E0260777", pronta: true },
@@ -647,6 +651,7 @@ describe("moverProposta", () => {
       where: { opportunityId: proposta.id },
     });
     expect(Number(contrato.valor)).toBe(2304); // 20 × 4,80 × 24 meses
+    expect(contrato.numero).toBe("PD269999"); // herda o PD, não gera CTR
     const mesesVigencia =
       (contrato.fimVigencia!.getFullYear() - contrato.inicioVigencia.getFullYear()) * 12 +
       (contrato.fimVigencia!.getMonth() - contrato.inicioVigencia.getMonth());

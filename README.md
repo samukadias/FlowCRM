@@ -171,3 +171,4 @@ src/test/              → infraestrutura de teste (banco, fixtures, mocks do Ne
 - [x] Catálogo com campo de categoria (agrupa a listagem) e importação da Tabela de Preços de Insumos de Informática 2026 da Prodesp (Resolução SGGD nº 29/2026): 225 itens em 30 categorias, do preço de hora-homem por perfil até nuvem/multicloud, infraestrutura física e certificados digitais
 - [x] Busca no catálogo (nome ou categoria) e seletor de produto com autocomplete no formulário de item da ESP — digitação sem acento também encontra
 - [x] Contrato nasce com o valor real da PO: no aceite, soma quantidade × valor unitário × período de todos os itens das ESPs (e a vigência acompanha o maior período contratual); sem itens, mantém o valor estimado e 12 meses
+- [x] O número do contrato é o próprio PD da proposta técnica (único, já conhecido pelo cliente) — Contratos e Faturamento exibem PDxxxxxx; CTR fica só para propostas sem PD (orçamento orientativo/registros antigos)
